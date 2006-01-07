@@ -1,14 +1,14 @@
-/* $XTermId: charproc.c,v 1.603 2005/08/05 01:25:39 tom Exp $ */
+/* $XTermId: charproc.c,v 1.633 2006/01/04 02:10:19 tom Exp $ */
 
 /*
  * $Xorg: charproc.c,v 1.6 2001/02/09 02:06:02 xorgcvs Exp $
  */
 
-/* $XFree86: xc/programs/xterm/charproc.c,v 3.173 2005/08/05 01:25:39 dickey Exp $ */
+/* $XFree86: xc/programs/xterm/charproc.c,v 3.178 2006/01/04 02:10:19 dickey Exp $ */
 
 /*
 
-Copyright 1999-2004,2005 by Thomas E. Dickey
+Copyright 1999-2005,2006 by Thomas E. Dickey
 
                         All Rights Reserved
 
@@ -225,11 +225,6 @@ static char defaultTranslations[] =
          Shift <KeyPress> Select:select-cursor-start() select-cursor-end(PRIMARY, CUT_BUFFER0) \n\
          Shift <KeyPress> Insert:insert-selection(PRIMARY, CUT_BUFFER0) \n\
 "
-#if OPT_DABBREV
-"\
-                 Meta <KeyPress> /:dabbrev-expand() \n\
-"
-#endif
 #if OPT_SHIFT_FONTS
 "\
     Shift~Ctrl <KeyPress> KP_Add:larger-vt-font() \n\
@@ -297,6 +292,7 @@ static XtActionsRec actionsList[] = {
     { "scroll-forw",		HandleScrollForward },
     { "secure",			HandleSecure },
     { "select-cursor-end",	HandleKeyboardSelectEnd },
+    { "select-cursor-extend",   HandleKeyboardSelectExtend },
     { "select-cursor-start",	HandleKeyboardSelectStart },
     { "select-end",		HandleSelectEnd },
     { "select-extend",		HandleSelectExtend },
@@ -363,6 +359,7 @@ static XtActionsRec actionsList[] = {
     { "restore",		HandleRestoreSize },
 #endif
 #if OPT_NUM_LOCK
+    { "alt-sends-escape",	HandleAltEsc },
     { "meta-sends-escape",	HandleMetaEsc },
     { "set-num-lock",		HandleNumLock },
 #endif
@@ -395,12 +392,6 @@ static XtActionsRec actionsList[] = {
 #endif
 };
 /* *INDENT-ON* */
-
-#ifdef VMS
-#define OS_DEPENDENT_PRINT_COMMAND "print/delete/noflag"
-#else /* VMS */
-#define OS_DEPENDENT_PRINT_COMMAND "lpr"
-#endif /* VMS */
 
 static XtResource resources[] =
 {
@@ -461,14 +452,15 @@ static XtResource resources[] =
 	 screen.printer_controlmode, 0),
     Ires(XtNvisualBellDelay, XtCVisualBellDelay, screen.visualBellDelay, 100),
     Ires(XtNsaveLines, XtCSaveLines, screen.savelines, SAVELINES),
+    Ires(XtNscrollBarBorder, XtCScrollBarBorder, screen.scrollBarBorder, 1),
     Ires(XtNscrollLines, XtCScrollLines, screen.scrolllines, SCROLLLINES),
 
-    Sres(XtNfont1, XtCFont1, screen.menu_font_names[fontMenu_font1], NULL),
-    Sres(XtNfont2, XtCFont2, screen.menu_font_names[fontMenu_font2], NULL),
-    Sres(XtNfont3, XtCFont3, screen.menu_font_names[fontMenu_font3], NULL),
-    Sres(XtNfont4, XtCFont4, screen.menu_font_names[fontMenu_font4], NULL),
-    Sres(XtNfont5, XtCFont5, screen.menu_font_names[fontMenu_font5], NULL),
-    Sres(XtNfont6, XtCFont6, screen.menu_font_names[fontMenu_font6], NULL),
+    Sres(XtNfont1, XtCFont1, screen.MenuFontName(fontMenu_font1), NULL),
+    Sres(XtNfont2, XtCFont2, screen.MenuFontName(fontMenu_font2), NULL),
+    Sres(XtNfont3, XtCFont3, screen.MenuFontName(fontMenu_font3), NULL),
+    Sres(XtNfont4, XtCFont4, screen.MenuFontName(fontMenu_font4), NULL),
+    Sres(XtNfont5, XtCFont5, screen.MenuFontName(fontMenu_font5), NULL),
+    Sres(XtNfont6, XtCFont6, screen.MenuFontName(fontMenu_font6), NULL),
     Sres(XtNanswerbackString, XtCAnswerbackString, screen.answer_back, ""),
     Sres(XtNboldFont, XtCBoldFont, misc.default_font.f_b, DEFBOLDFONT),
     Sres(XtNcharClass, XtCCharClass, screen.charClass, NULL),
@@ -476,7 +468,7 @@ static XtResource resources[] =
     Sres(XtNfont, XtCFont, misc.default_font.f_n, DEFFONT),
     Sres(XtNgeometry, XtCGeometry, misc.geo_metry, NULL),
     Sres(XtNkeyboardDialect, XtCKeyboardDialect, screen.keyboard_dialect, DFT_KBD_DIALECT),
-    Sres(XtNprinterCommand, XtCPrinterCommand, screen.printer_command, OS_DEPENDENT_PRINT_COMMAND),
+    Sres(XtNprinterCommand, XtCPrinterCommand, screen.printer_command, ""),
     Sres(XtNtekGeometry, XtCGeometry, misc.T_geometry, NULL),
 
     Tres(XtNcursorColor, XtCCursorColor, TEXT_CURSOR, XtDefaultForeground),
@@ -760,6 +752,7 @@ xtermAddInput(Widget w)
 	{ "scroll-back",	    HandleScrollBack },
 	{ "scroll-forw",	    HandleScrollForward },
 	{ "select-cursor-end",	    HandleKeyboardSelectEnd },
+	{ "select-cursor-extend",   HandleKeyboardSelectExtend },
 	{ "select-cursor-start",    HandleKeyboardSelectStart },
 	{ "insert-selection",	    HandleInsertSelection },
 	{ "select-start",	    HandleSelectStart },
@@ -806,12 +799,12 @@ SGR_Foreground(int color)
     fg = getXtermForeground(term->flags, color);
     term->cur_foreground = color;
 
-    XSetForeground(screen->display, NormalGC(screen), fg);
-    XSetBackground(screen->display, ReverseGC(screen), fg);
-
     if (NormalGC(screen) != NormalBoldGC(screen)) {
 	XSetForeground(screen->display, NormalBoldGC(screen), fg);
 	XSetBackground(screen->display, ReverseBoldGC(screen), fg);
+    } else {
+	XSetForeground(screen->display, NormalGC(screen), fg);
+	XSetBackground(screen->display, ReverseGC(screen), fg);
     }
 }
 
@@ -838,12 +831,12 @@ SGR_Background(int color)
     bg = getXtermBackground(term->flags, color);
     term->cur_background = color;
 
-    XSetBackground(screen->display, NormalGC(screen), bg);
-    XSetForeground(screen->display, ReverseGC(screen), bg);
-
     if (NormalGC(screen) != NormalBoldGC(screen)) {
 	XSetBackground(screen->display, NormalBoldGC(screen), bg);
 	XSetForeground(screen->display, ReverseBoldGC(screen), bg);
+    } else {
+	XSetBackground(screen->display, NormalGC(screen), bg);
+	XSetForeground(screen->display, ReverseGC(screen), bg);
     }
 }
 
@@ -1702,8 +1695,12 @@ doparsing(unsigned c, struct ParseState *sp)
 	    break;
 
 	case CASE_TRACK_MOUSE:
-	    if (screen->send_mouse_pos == VT200_HIGHLIGHT_MOUSE
-		|| nparam > 1) {
+	    /*
+	     * A single parameter other than zero is always scroll-down.
+	     * A zero-parameter is used to reset the mouse mode, and is
+	     * not useful for scrolling anyway.
+	     */
+	    if (nparam > 1 || param[0] == 0) {
 		TRACE(("CASE_TRACK_MOUSE\n"));
 		/* Track mouse as long as in window and between
 		 * specified rows
@@ -1735,7 +1732,7 @@ doparsing(unsigned c, struct ParseState *sp)
 	    /* FALLTHRU */
 	case CASE_DA1:
 	    TRACE(("CASE_DA1\n"));
-	    if (param[0] <= 1) {	/* less than means DEFAULT */
+	    if (param[0] <= 0) {	/* less than means DEFAULT */
 		count = 0;
 		reply.a_type = CSI;
 		reply.a_pintro = '?';
@@ -2994,6 +2991,7 @@ in_put(void)
 		ScreenResize(&term->screen, replyWidth, replyHeight,
 			     &term->flags);
 	    }
+	    repairSizeHints();
 	}
 
 	if (eventMode == NORMAL
@@ -3177,6 +3175,8 @@ in_put(void)
 	    time_select = 1;
 #endif
 	}
+	if (need_cleanup)
+	    Cleanup(0);
 	i = Select(max_plus1, &select_mask, &write_mask, 0,
 		   (time_select ? &select_timeout : 0));
 	if (i < 0) {
@@ -3449,11 +3449,11 @@ WriteText(TScreen * screen, PAIRED_CHARS(Char * str, Char * str2), Cardinal len)
 	   len, visibleChars(PAIRED_CHARS(str, str2), len)));
 
     if (ScrnHaveSelection(screen)
-	&& ScrnIsLineInSelection(screen, screen->cur_row - screen->topline)) {
+	&& ScrnIsLineInSelection(screen, INX2ROW(screen, screen->cur_row))) {
 	ScrnDisownSelection(screen);
     }
 
-    if (screen->cur_row - screen->topline <= screen->max_row) {
+    if (INX2ROW(screen, screen->cur_row) <= screen->max_row) {
 	if (screen->cursor_state)
 	    HideCursor();
 
@@ -3587,16 +3587,43 @@ HandleStructNotify(Widget w GCC_UNUSED,
     case ConfigureNotify:
 	TRACE(("HandleStructNotify(ConfigureNotify)\n"));
 #if OPT_TOOLBAR
+	/* the notify is for the top-level widget, but we care about vt100 */
 	if (term->screen.Vshow) {
+	    TScreen *screen = &term->screen;
 	    struct _vtwin *Vwin = WhichVWin(&(term->screen));
-	    if (Vwin->tb_info.menu_bar) {
-		XtVaGetValues(Vwin->tb_info.menu_bar,
-			      XtNheight, &Vwin->tb_info.menu_height,
+	    TbInfo *info = &(Vwin->tb_info);
+	    TbInfo save = *info;
+
+	    if (info->menu_bar) {
+		XtVaGetValues(info->menu_bar,
+			      XtNheight, &info->menu_height,
+			      XtNborderWidth, &info->menu_border,
 			      (XtPointer) 0);
-		TRACE(("...menu_height %d\n", Vwin->tb_info.menu_height));
+
+		if (save.menu_height != info->menu_height
+		    || save.menu_border != info->menu_border) {
+
+		    TRACE(("...menu_height %d\n", info->menu_height));
+		    TRACE(("...menu_border %d\n", info->menu_border));
+		    TRACE(("...had height  %d, border %d\n",
+			   save.menu_height,
+			   save.menu_border));
+
+		    /*
+		     * FIXME: Window manager still may be using the old values.
+		     * Try to fool it.
+		     */
+		    XtMakeResizeRequest((Widget) term,
+					screen->fullVwin.fullwidth,
+					info->menu_height
+					- save.menu_height
+					+ screen->fullVwin.fullheight,
+					NULL, NULL);
+		    repairSizeHints();
+		}
 	    }
 	}
-#endif
+#endif /* OPT_TOOLBAR */
 	break;
     default:
 	TRACE(("HandleStructNotify(event %d)\n", event->type));
@@ -3906,13 +3933,16 @@ dpmodes(XtermWidget termw,
 #if OPT_NUM_LOCK
 	case 1035:
 	    term->misc.real_NumLock = (func == bitset) ? ON : OFF;
+	    update_num_lock();
 	    break;
 	case 1036:
 	    screen->meta_sends_esc = (func == bitset) ? ON : OFF;
+	    update_meta_esc();
 	    break;
 #endif
 	case 1037:
 	    screen->delete_is_del = (func == bitset) ? ON : OFF;
+	    update_delete_del();
 	    break;
 	case 1048:
 	    if (!termw->misc.titeInhibit) {
@@ -4408,7 +4438,7 @@ window_ops(XtermWidget termw)
 
 #if OPT_MAXIMIZE
     case 19:			/* Report the screen's size, in characters */
-	if (!QueryMaximize(screen, &root_height, &root_width)) {
+	if (!QueryMaximize(term, &root_height, &root_width)) {
 	    root_height = 0;
 	    root_width = 0;
 	}
@@ -4616,7 +4646,7 @@ SwitchBufs(TScreen * screen)
     rows = MaxRows(screen);
     SwitchBufPtrs(screen);
 
-    if ((top = -screen->topline) < rows) {
+    if ((top = INX2ROW(screen, 0)) < rows) {
 	if (screen->scroll_amt)
 	    FlushScroll(screen);
 	if (top == 0)
@@ -4633,7 +4663,13 @@ SwitchBufs(TScreen * screen)
     ScrnUpdate(screen, 0, 0, rows, MaxCols(screen), False);
 }
 
-/* swap buffer line pointers between alt and regular screens */
+/*
+ * Swap buffer line pointers between alternate and regular screens.
+ * visbuf contains pointers from allbuf or altbuf for the visible screen,
+ * and pointers from allbuf for the saved lines.  That makes it simple to
+ * scroll back over the saved lines without juggling pointers for the 
+ * regular and alternate screens.
+ */
 void
 SwitchBufPtrs(TScreen * screen)
 {
@@ -4848,7 +4884,12 @@ RequestResize(XtermWidget termw, int rows, int cols, int text)
 	&& replyWidth) {
 	sizehints.height = replyHeight;
 	sizehints.width = replyWidth;
+
+	TRACE(("%s@%d -- ", __FILE__, __LINE__));
+	TRACE_HINTS(&sizehints);
 	XSetWMNormalHints(screen->display, VShellWindow, &sizehints);
+	TRACE(("%s@%d -- ", __FILE__, __LINE__));
+	TRACE_WM_HINTS(termw);
     }
 #endif
 
@@ -5216,6 +5257,7 @@ VTInitialize(Widget wrequest,
     init_Bres(screen.multiscroll);
     init_Ires(screen.nmarginbell);
     init_Ires(screen.savelines);
+    init_Ires(screen.scrollBarBorder);
     init_Ires(screen.scrolllines);
     init_Bres(screen.scrollttyoutput);
     init_Bres(screen.scrollkey);
@@ -5313,12 +5355,12 @@ VTInitialize(Widget wrequest,
     init_Bres(misc.tiXtraScroll);
     init_Bres(misc.dynamicColors);
     for (i = fontMenu_font1; i <= fontMenu_lastBuiltin; i++) {
-	init_Sres(screen.menu_font_names[i]);
+	init_Sres(screen.MenuFontName(i));
     }
     /* set default in realize proc */
-    wnew->screen.menu_font_names[fontMenu_fontdefault] = NULL;
-    wnew->screen.menu_font_names[fontMenu_fontescape] = NULL;
-    wnew->screen.menu_font_names[fontMenu_fontsel] = NULL;
+    wnew->screen.MenuFontName(fontMenu_fontdefault) = NULL;
+    wnew->screen.MenuFontName(fontMenu_fontescape) = NULL;
+    wnew->screen.MenuFontName(fontMenu_fontsel) = NULL;
     wnew->screen.menu_font_number = fontMenu_fontdefault;
 
 #if OPT_BROKEN_OSC
@@ -5604,6 +5646,8 @@ VTInitialize(Widget wrequest,
 	wnew->flags |= WRAPAROUND;
     if (wnew->misc.re_verse != wnew->misc.re_verse0)
 	wnew->flags |= REVERSE_VIDEO;
+    if (wnew->screen.c132)
+	wnew->flags |= IN132COLUMNS;
 
     wnew->initflags = wnew->flags;
 
@@ -5621,8 +5665,80 @@ VTInitialize(Widget wrequest,
 }
 
 static void
+releaseCursorGCs(TScreen * screen)
+{
+    if (screen->cursorGC)
+	XFreeGC(screen->display, screen->cursorGC);
+    if (screen->fillCursorGC)
+	XFreeGC(screen->display, screen->fillCursorGC);
+    if (screen->reversecursorGC)
+	XFreeGC(screen->display, screen->reversecursorGC);
+    if (screen->cursoroutlineGC)
+	XFreeGC(screen->display, screen->cursoroutlineGC);
+}
+
+static void
+releaseWindowGCs(Widget w, struct _vtwin *win)
+{
+    XtReleaseGC(w, win->normalGC);
+    XtReleaseGC(w, win->reverseGC);
+    XtReleaseGC(w, win->normalboldGC);
+    XtReleaseGC(w, win->reverseboldGC);
+}
+
+static void
 VTDestroy(Widget w)
 {
+    XtermWidget xw = (XtermWidget) w;
+    TScreen *screen = &xw->screen;
+
+    if (screen->scrollWidget)
+	XtDestroyWidget(screen->scrollWidget);
+
+    if (screen->save_ptr) {
+	free(screen->save_ptr);
+	TRACE(("freed screen->save_ptr\n"));
+    }
+
+    if (screen->sbuf_address) {
+	free(screen->sbuf_address);
+	TRACE(("freed screen->sbuf_address\n"));
+    }
+    if (screen->allbuf) {
+	free(screen->allbuf);
+	TRACE(("freed screen->allbuf\n"));
+    }
+
+    if (screen->abuf_address) {
+	free(screen->abuf_address);
+	TRACE(("freed screen->abuf_address\n"));
+    }
+    if (screen->altbuf) {
+	free(screen->altbuf);
+	TRACE(("freed screen->altbuf\n"));
+    }
+#if OPT_WIDE_CHARS
+    if (screen->draw_buf) {
+	free(screen->draw_buf);
+	TRACE(("freed screen->draw_buf\n"));
+    }
+#endif
+#if OPT_INPUT_METHOD
+    if (screen->xim) {
+	XCloseIM(screen->xim);
+	TRACE(("freed screen->xim\n"));
+    }
+#endif
+    releaseCursorGCs(screen);
+    releaseWindowGCs(w, &(screen->fullVwin));
+    releaseWindowGCs(w, &(screen->iconVwin));
+
+    if (screen->fnt_bold != 0
+	&& screen->fnt_bold != screen->fnt_norm)
+	XFreeFont(screen->display, screen->fnt_bold);
+    if (screen->fnt_norm != 0)
+	XFreeFont(screen->display, screen->fnt_norm);
+
     XtFree((char *) (((XtermWidget) w)->screen.selection_data));
 }
 
@@ -5637,7 +5753,6 @@ VTRealize(Widget w,
 
     unsigned width, height;
     int xpos, ypos, pr;
-    int rc;
     XSizeHints sizehints;
     Atom pid_atom;
 
@@ -5645,7 +5760,7 @@ VTRealize(Widget w,
 
     TabReset(xw->tabs);
 
-    screen->menu_font_names[fontMenu_fontdefault] = xw->misc.default_font.f_n;
+    screen->MenuFontName(fontMenu_fontdefault) = xw->misc.default_font.f_n;
     screen->fnt_norm = NULL;
     screen->fnt_bold = NULL;
 #if OPT_WIDE_CHARS
@@ -5662,7 +5777,7 @@ VTRealize(Widget w,
 	    (void) xtermLoadFont(xw,
 				 xtermFontName("fixed"),
 				 False, 0);
-	    screen->menu_font_names[fontMenu_fontdefault] = "fixed";
+	    screen->MenuFontName(fontMenu_fontdefault) = "fixed";
 	}
     }
 
@@ -5754,14 +5869,20 @@ VTRealize(Widget w,
 	/* set a default size, but do *not* set position */
 	sizehints.flags |= PSize;
     }
-    sizehints.width = width;
-    sizehints.height = height;
+    sizehints.height = sizehints.base_height
+	+ sizehints.height_inc * MaxRows(screen);
+    sizehints.width = sizehints.base_width
+	+ sizehints.width_inc * MaxCols(screen);
 
     if ((WidthValue & pr) || (HeightValue & pr))
 	sizehints.flags |= USSize;
     else
 	sizehints.flags |= PSize;
 
+    /*
+     * Note that the size-hints are for the shell, while the resize-request
+     * is for the vt100 widget.  They are not the same size.
+     */
     TRACE(("make resize request %dx%d\n", height, width));
     (void) XtMakeResizeRequest((Widget) xw,
 			       (Dimension) width, (Dimension) height,
@@ -5776,20 +5897,19 @@ VTRealize(Widget w,
 	XMoveWindow(XtDisplay(xw), XtWindow(SHELL_OF(xw)),
 		    sizehints.x, sizehints.y);
 
-    XSetWMNormalHints(XtDisplay(xw), XtWindow(SHELL_OF(xw)),
-		      &sizehints);
+    TRACE(("%s@%d -- ", __FILE__, __LINE__));
+    TRACE_HINTS(&sizehints);
+    XSetWMNormalHints(XtDisplay(xw), XtWindow(SHELL_OF(xw)), &sizehints);
+    TRACE(("%s@%d -- ", __FILE__, __LINE__));
+    TRACE_WM_HINTS(xw);
 
-    /*
-     * _NET_WM_PID must only be set if WM_CLIENT_MACHINE is set.
-     */
-    if (XInternAtom(XtDisplay(xw), "WM_CLIENT_MACHINE", True) != None
-	&& (pid_atom = XInternAtom(XtDisplay(xw), "_NET_WM_PID", False))
-	!= None) {
+    if ((pid_atom = XInternAtom(XtDisplay(xw), "_NET_WM_PID", False)) != None) {
+	/* XChangeProperty format 32 really is "long" */
 	unsigned long pid_l = (unsigned long) getpid();
 	TRACE(("Setting _NET_WM_PID property to %lu\n", pid_l));
-	rc = XChangeProperty(XtDisplay(xw), VShellWindow,
-			     pid_atom, XA_CARDINAL, 32, PropModeReplace,
-			     (unsigned char *) &pid_l, 1);
+	XChangeProperty(XtDisplay(xw), VShellWindow,
+			pid_atom, XA_CARDINAL, 32, PropModeReplace,
+			(unsigned char *) &pid_l, 1);
     }
 
     XFlush(XtDisplay(xw));	/* get it out to window manager */
@@ -6208,19 +6328,19 @@ VTSetValues(Widget cur,
 	 T_COLOR(&(newvt->screen), TEXT_BG)) ||
 	(T_COLOR(&(curvt->screen), TEXT_FG) !=
 	 T_COLOR(&(newvt->screen), TEXT_FG)) ||
-	(curvt->screen.menu_font_names[curvt->screen.menu_font_number] !=
-	 newvt->screen.menu_font_names[newvt->screen.menu_font_number]) ||
+	(curvt->screen.MenuFontName(curvt->screen.menu_font_number) !=
+	 newvt->screen.MenuFontName(newvt->screen.menu_font_number)) ||
 	(curvt->misc.default_font.f_n != newvt->misc.default_font.f_n)) {
 	if (curvt->misc.default_font.f_n != newvt->misc.default_font.f_n)
-	    newvt->screen.menu_font_names[fontMenu_fontdefault] = newvt->misc.default_font.f_n;
+	    newvt->screen.MenuFontName(fontMenu_fontdefault) = newvt->misc.default_font.f_n;
 	if (xtermLoadFont(newvt,
-			  xtermFontName(newvt->screen.menu_font_names[curvt->screen.menu_font_number]),
+			  xtermFontName(newvt->screen.MenuFontName(curvt->screen.menu_font_number)),
 			  True, newvt->screen.menu_font_number)) {
 	    /* resizing does the redisplay, so don't ask for it here */
 	    refresh_needed = True;
 	    fonts_redone = True;
 	} else if (curvt->misc.default_font.f_n != newvt->misc.default_font.f_n)
-	    newvt->screen.menu_font_names[fontMenu_fontdefault] = curvt->misc.default_font.f_n;
+	    newvt->screen.MenuFontName(fontMenu_fontdefault) = curvt->misc.default_font.f_n;
     }
     if (!fonts_redone
 	&& (T_COLOR(&(curvt->screen), TEXT_CURSOR) !=
@@ -6297,7 +6417,7 @@ ShowCursor(void)
     if (eventMode != NORMAL)
 	return;
 
-    if (screen->cur_row - screen->topline > screen->max_row)
+    if (INX2ROW(screen, screen->cur_row) > screen->max_row)
 	return;
 
     screen->cursor_row = screen->cur_row;
@@ -6508,7 +6628,7 @@ HideCursor(void)
 
     if (screen->cursor_state == OFF)	/* FIXME */
 	return;
-    if (screen->cursor_row - screen->topline > screen->max_row)
+    if (INX2ROW(screen, screen->cursor_row) > screen->max_row)
 	return;
 
     cursor_col = screen->cursor_col;
@@ -6803,17 +6923,26 @@ VTReset(Bool full, Bool saved)
 	update_jumpscroll();
 
 	if (screen->c132 && (term->flags & IN132COLUMNS)) {
-	    Dimension junk;
+	    Dimension reqWidth = (80 * FontWidth(screen)
+				  + 2 * screen->border + ScrollbarWidth(screen));
+	    Dimension reqHeight = (FontHeight(screen)
+				   * MaxRows(screen) + 2 * screen->border);
+	    Dimension replyWidth;
+	    Dimension replyHeight;
+
+	    TRACE(("Making resize-request to restore 80-columns %dx%d\n",
+		   reqHeight, reqWidth));
 	    XtMakeResizeRequest((Widget) term,
-				(Dimension) 80 * FontWidth(screen)
-				+ 2 * screen->border + ScrollbarWidth(screen),
-				(Dimension) FontHeight(screen)
-				* MaxRows(screen) + 2 * screen->border,
-				&junk, &junk);
+				reqWidth,
+				reqHeight,
+				&replyWidth, &replyHeight);
+	    TRACE(("...result %dx%d\n", replyHeight, replyWidth));
+	    repairSizeHints();
 	    XSync(screen->display, False);	/* synchronize */
 	    if (XtAppPending(app_con))
 		xevents();
 	}
+
 	CursorSet(screen, 0, 0, term->flags);
 	CursorSave(term);
     } else {			/* DECSTR */
@@ -7086,7 +7215,7 @@ FindFontSelection(char *atom_name, Bool justprobe)
 
     target = XmuInternAtom(XtDisplay(term), *pAtom);
     if (justprobe) {
-	term->screen.menu_font_names[fontMenu_fontsel] =
+	term->screen.MenuFontName(fontMenu_fontsel) =
 	    XGetSelectionOwner(XtDisplay(term), target) ? _Font_Selected_ : 0;
     } else {
 	XtGetSelectionValue((Widget) term, target, XA_STRING,
@@ -7108,6 +7237,7 @@ set_cursor_gcs(TScreen * screen)
     GC new_cursorFillGC = NULL;
     GC new_reversecursorGC = NULL;
     GC new_cursoroutlineGC = NULL;
+    Boolean changed = False;
 
     /*
      * Let's see, there are three things that have "color":
@@ -7167,6 +7297,8 @@ set_cursor_gcs(TScreen * screen)
 		new_cursoroutlineGC =
 		    XCreateGC(screen->display, VWindow(screen), mask, &xgcv);
 	    }
+	    releaseCursorGCs(screen);
+	    changed = True;
 	}
     } else
 #endif
@@ -7194,32 +7326,14 @@ set_cursor_gcs(TScreen * screen)
 	    xgcv.background = bg;
 	    new_cursoroutlineGC = XtGetGC((Widget) term, mask, &xgcv);
 	}
-    }
-#if OPT_ISO_COLORS
-    if (screen->colorMode) {
-	if (screen->cursorGC)
-	    XFreeGC(screen->display, screen->cursorGC);
-	if (screen->fillCursorGC)
-	    XFreeGC(screen->display, screen->fillCursorGC);
-	if (screen->reversecursorGC)
-	    XFreeGC(screen->display, screen->reversecursorGC);
-	if (screen->cursoroutlineGC)
-	    XFreeGC(screen->display, screen->cursoroutlineGC);
-    } else
-#endif
-    {
-	if (screen->cursorGC)
-	    XtReleaseGC((Widget) term, screen->cursorGC);
-	if (screen->fillCursorGC)
-	    XtReleaseGC((Widget) term, screen->fillCursorGC);
-	if (screen->reversecursorGC)
-	    XtReleaseGC((Widget) term, screen->reversecursorGC);
-	if (screen->cursoroutlineGC)
-	    XtReleaseGC((Widget) term, screen->cursoroutlineGC);
+	releaseCursorGCs(screen);
+	changed = True;
     }
 
-    screen->cursorGC = new_cursorGC;
-    screen->fillCursorGC = new_cursorFillGC;
-    screen->reversecursorGC = new_reversecursorGC;
-    screen->cursoroutlineGC = new_cursoroutlineGC;
+    if (changed) {
+	screen->cursorGC = new_cursorGC;
+	screen->fillCursorGC = new_cursorFillGC;
+	screen->reversecursorGC = new_reversecursorGC;
+	screen->cursoroutlineGC = new_cursoroutlineGC;
+    }
 }

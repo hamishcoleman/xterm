@@ -1,13 +1,13 @@
-/* $XTermId: ptyx.h,v 1.382 2005/08/05 01:25:40 tom Exp $ */
+/* $XTermId: ptyx.h,v 1.395 2006/01/04 02:10:26 tom Exp $ */
 
 /*
  *	$Xorg: ptyx.h,v 1.3 2000/08/17 19:55:09 cpqbld Exp $
  */
 
-/* $XFree86: xc/programs/xterm/ptyx.h,v 3.124 2005/08/05 01:25:40 dickey Exp $ */
+/* $XFree86: xc/programs/xterm/ptyx.h,v 3.128 2006/01/04 02:10:26 dickey Exp $ */
 
 /*
- * Copyright 1999-2004,2005 by Thomas E. Dickey
+ * Copyright 1999-2005,2006 by Thomas E. Dickey
  *
  *                         All Rights Reserved
  *
@@ -139,7 +139,7 @@
 #define USE_PTY_DEVICE 1
 #define USE_PTY_SEARCH 1
 
-#if defined(__osf__) || (defined(linux) && defined(__GLIBC__) && (__GLIBC__ >= 2) && (__GLIBC_MINOR__ >= 1)) || defined(__NetBSD__)
+#if defined(__osf__) || (defined(linux) && defined(__GLIBC__) && (__GLIBC__ >= 2) && (__GLIBC_MINOR__ >= 1)) || defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__)
 #undef USE_PTY_DEVICE
 #undef USE_PTY_SEARCH
 #define USE_PTS_DEVICE 1
@@ -676,6 +676,19 @@ typedef struct {
 
 /***====================================================================***/
 
+/*
+ * Indices for menu_font_names[][]
+ */
+typedef enum {
+    fNorm = 0
+    , fBold
+#if OPT_WIDE_CHARS
+    , fWide
+    , fWBold
+#endif
+    , fMAX
+} VTFontEnum;
+
 /* indices for the normal terminal colors in screen.Tcolors[] */
 typedef enum {
     TEXT_FG = 0			/* text foreground */
@@ -977,49 +990,6 @@ typedef struct {
 
 /***====================================================================***/
 
-#if OPT_TRACE
-#include <trace.h>
-#undef NDEBUG			/* turn on assert's */
-#else
-#ifndef NDEBUG
-#define NDEBUG			/* not debugging, don't do assert's */
-#endif
-#endif
-
-#ifndef TRACE
-#define TRACE(p) /*nothing*/
-#endif
-
-#ifndef TRACE_ARGV
-#define TRACE_ARGV(tag,argv) /*nothing*/
-#endif
-
-#ifndef TRACE_CHILD
-#define TRACE_CHILD /*nothing*/
-#endif
-
-#ifndef TRACE_HINTS
-#define TRACE_HINTS(hints) /*nothing*/
-#endif
-
-#ifndef TRACE_OPTS
-#define TRACE_OPTS(opts,ress,lens) /*nothing*/
-#endif
-
-#ifndef TRACE_TRANS
-#define TRACE_TRANS(name,w) /*nothing*/
-#endif
-
-#ifndef TRACE_XRES
-#define TRACE_XRES() /*nothing*/
-#endif
-
-#ifndef TRACE2
-#define TRACE2(p) /*nothing*/
-#endif
-
-/***====================================================================***/
-
 /* The order of ifdef's matches the logic for num_ptrs in VTInitialize */
 typedef enum {
 	OFF_FLAGS = 0		/* BUF_HEAD */
@@ -1044,6 +1014,13 @@ typedef enum {
 	, OFF_COM2H
 #endif
 } BufOffsets;
+
+	/*
+	 * A "row" is the index within the visible part of the screen, and an
+	 * "inx" is the index within the whole set of scrollable lines.
+	 */
+#define ROW2INX(screen, row)	((row) + (screen)->topline)
+#define INX2ROW(screen, inx)	((inx) - (screen)->topline)
 
 	/* ScrnBuf-level macros */
 #define BUF_FLAGS(buf, row) (buf[MAX_PTRS * (row) + OFF_FLAGS])
@@ -1185,6 +1162,7 @@ typedef struct {
 typedef struct {
 	Widget		menu_bar;	/* toolbar, if initialized	*/
 	Dimension	menu_height;	/* ...and its height		*/
+	Dimension	menu_border;	/* ...and its border		*/
 } TbInfo;
 #define VT100_TB_INFO(name) screen.fullVwin.tb_info.name
 #endif
@@ -1268,6 +1246,8 @@ typedef struct {
 	IChar		utf_char;	/* in-progress character	*/
 	int		last_written_col;
 	int		last_written_row;
+	XChar2b		*draw_buf;	/* drawXtermText() data		*/
+	Cardinal	draw_len;	/* " " "			*/
 #endif
 #if OPT_BROKEN_OSC
 	Boolean		brokenLinuxOSC; /* true to ignore Linux palette ctls */
@@ -1279,6 +1259,7 @@ typedef struct {
 	Boolean		c1_printable;	/* true if we treat C1 as print	*/
 #endif
 	int		border;		/* inner border			*/
+	int		scrollBarBorder; /* scrollBar border		*/
 	Cursor		arrow;		/* arrow cursor			*/
 	unsigned long	event_mask;
 	unsigned short	send_mouse_pos;	/* user wants mouse transition  */
@@ -1392,7 +1373,6 @@ typedef struct {
 	int		cursor_set;	/* requested state		*/
 	int		cursor_col;	/* previous cursor column	*/
 	int		cursor_row;	/* previous cursor row		*/
-	Boolean		cursor_moved;	/* scrolling makes cursor move	*/
 	int		cur_col;	/* current cursor column	*/
 	int		cur_row;	/* current cursor row		*/
 	int		max_col;	/* rightmost column		*/
@@ -1400,24 +1380,46 @@ typedef struct {
 	int		top_marg;	/* top line of scrolling region */
 	int		bot_marg;	/* bottom line of  "	    "	*/
 	Widget		scrollWidget;	/* pointer to scrollbar struct	*/
+	/*
+	 * Indices used to keep track of the top of the vt100 window and
+	 * the saved lines, taking scrolling into account.
+	 */
 	int		topline;	/* line number of top, <= 0	*/
 	int		savedlines;     /* number of lines that've been saved */
 	int		savelines;	/* number of lines off top to save */
-	int		scrolllines;	/* number of lines to button scroll */
-	Boolean		scrollttyoutput; /* scroll to bottom on tty output */
-	Boolean		scrollkey;	/* scroll to bottom on key	*/
-
+	int		scroll_amt;	/* amount to scroll		*/
+	int		refresh_amt;	/* amount to refresh		*/
+	/*
+	 * Pointer to the current visible buffer, e.g., allbuf or altbuf.
+	 */
 	ScrnBuf		visbuf;		/* ptr to visible screen buf (main) */
+	/*
+	 * Data for the normal buffer, which may have saved lines to which
+	 * the user can scroll.
+	 */
 	ScrnBuf		allbuf;		/* screen buffer (may include
 					   lines scrolled off top)	*/
 	Char		*sbuf_address;	/* main screen memory address   */
+	/*
+	 * Data for the alternate buffer.
+	 */
 	ScrnBuf		altbuf;		/* alternate screen buffer	*/
 	Char		*abuf_address;	/* alternate screen memory address */
+	Boolean		alternate;	/* true if using alternate buf	*/
+	/*
+	 * Workspace used for screen operations.
+	 */
 	Char		**save_ptr;	/* workspace for save-pointers  */
 	size_t		save_len;	/* ...and its length		*/
-	Boolean		alternate;	/* true if using alternate buf	*/
+
+	int		scrolllines;	/* number of lines to button scroll */
+	Boolean		scrollttyoutput; /* scroll to bottom on tty output */
+	Boolean		scrollkey;	/* scroll to bottom on key	*/
+	Boolean		cursor_moved;	/* scrolling makes cursor move	*/
+
 	unsigned short	do_wrap;	/* true if cursor in last column
 					    and character just output    */
+
 	int		incopy;		/* 0 idle; 1 XCopyArea issued;
 					    -1 first GraphicsExpose seen,
 					    but last not seen		*/
@@ -1427,6 +1429,7 @@ typedef struct {
 	unsigned int	copy_height;
 	int		copy_dest_x;
 	int		copy_dest_y;
+
 	Boolean		c132;		/* allow change to 132 columns	*/
 	Boolean		curses;		/* kludge line wrap for more	*/
 	Boolean		hp_ll_bc;	/* kludge HP-style ll for xdb	*/
@@ -1449,8 +1452,6 @@ typedef struct {
 	int		terminal_id;	/* 100=vt100, 220=vt220, etc.	*/
 	int		vtXX_level;	/* 0=vt52, 1,2,3 = vt100 ... vt320 */
 	int		ansi_level;	/* levels 1,2,3			*/
-	int		scroll_amt;	/* amount to scroll		*/
-	int		refresh_amt;	/* amount to refresh		*/
 	int		protected_mode;	/* 0=off, 1=DEC, 2=ISO		*/
 	Boolean		old_fkeys;	/* true for compatible fkeys	*/
 	Boolean		delete_is_del;	/* true for compatible Delete key */
@@ -1534,8 +1535,8 @@ typedef struct {
 	Boolean		backarrow_key;		/* backspace/delete */
 	Boolean		meta_sends_esc;		/* Meta-key sends ESC prefix */
 	Pixmap		menu_item_bitmap;	/* mask for checking items */
-	String		bold_font_names[NMENUFONTS];
-	String		menu_font_names[NMENUFONTS];
+	String		menu_font_names[NMENUFONTS][fMAX];
+#define MenuFontName(n) menu_font_names[n][fNorm]
 	long		menu_font_sizes[NMENUFONTS];
 	int		menu_font_number;
 #if OPT_RENDERFONT
@@ -1888,7 +1889,7 @@ typedef struct _TekWidgetRec {
 		     (screen)->cursor_row != (screen)->cur_row))
 
 #define CursorX(screen,col) ((col) * FontWidth(screen) + OriginX(screen))
-#define CursorY(screen,row) ((((row) - screen->topline) * FontHeight(screen)) \
+#define CursorY(screen,row) ((INX2ROW(screen, row) * FontHeight(screen)) \
 			+ screen->border)
 
 /*
@@ -1958,7 +1959,10 @@ typedef struct _TekWidgetRec {
 #define BorderPixel(w)		((w)->core.border_pixel)
 
 #if OPT_TOOLBAR
-#define ToolbarHeight(w) ((resource.toolBar) ? term->VT100_TB_INFO(menu_height) : 0)
+#define ToolbarHeight(w)	((resource.toolBar) \
+				 ? (term->VT100_TB_INFO(menu_height) \
+				  + term->VT100_TB_INFO(menu_border) * 2) \
+				 : 0)
 #else
 #define ToolbarHeight(w) 0
 #endif
@@ -1990,5 +1994,52 @@ typedef struct Tek_Link
 #endif
 #define	I_SIGNAL	0x02
 #define	I_TEK		0x04
+
+/***====================================================================***/
+
+#if OPT_TRACE
+#include <trace.h>
+#undef NDEBUG			/* turn on assert's */
+#else
+#ifndef NDEBUG
+#define NDEBUG			/* not debugging, don't do assert's */
+#endif
+#endif
+
+#ifndef TRACE
+#define TRACE(p) /*nothing*/
+#endif
+
+#ifndef TRACE_ARGV
+#define TRACE_ARGV(tag,argv) /*nothing*/
+#endif
+
+#ifndef TRACE_CHILD
+#define TRACE_CHILD /*nothing*/
+#endif
+
+#ifndef TRACE_HINTS
+#define TRACE_HINTS(hints) /*nothing*/
+#endif
+
+#ifndef TRACE_OPTS
+#define TRACE_OPTS(opts,ress,lens) /*nothing*/
+#endif
+
+#ifndef TRACE_TRANS
+#define TRACE_TRANS(name,w) /*nothing*/
+#endif
+
+#ifndef TRACE_WM_HINTS
+#define TRACE_WM_HINTS(w) /*nothing*/
+#endif
+
+#ifndef TRACE_XRES
+#define TRACE_XRES() /*nothing*/
+#endif
+
+#ifndef TRACE2
+#define TRACE2(p) /*nothing*/
+#endif
 
 #endif /* included_ptyx_h */

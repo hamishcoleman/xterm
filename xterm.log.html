@@ -1,7 +1,7 @@
 <!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
 <!--
  *****************************************************************************
- * Copyright 1996-2004,2005 by Thomas E. Dickey                              *
+ * Copyright 1996-2005,2006 by Thomas E. Dickey                              *
  * All Rights Reserved.                                                      *
  *                                                                           *
  * Permission to use, copy, modify, and distribute this software and its     *
@@ -20,8 +20,8 @@
  * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF   *
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.            *
  *****************************************************************************
-  $XTermId: xterm.log.html,v 1.287 2005/08/05 01:25:40 tom Exp $
-  $XFree86: xc/programs/xterm/xterm.log.html,v 1.140 2005/08/05 01:25:40 dickey Exp $
+  $XTermId: xterm.log.html,v 1.359 2006/01/04 02:10:27 tom Exp $
+  $XFree86: xc/programs/xterm/xterm.log.html,v 1.144 2006/01/04 02:10:27 dickey Exp $
   -->
 <HTML>
 <HEAD>
@@ -46,6 +46,10 @@ Most of these are summarized in the XFree86 CHANGELOG
 is the latest version of this file.
 
 <UL>
+<LI><A HREF="#xterm_208">Patch #208 - 2006/1/3 - XFree86 4.5.99.19</A>
+<LI><A HREF="#xterm_207">Patch #207 - 2005/11/13 - XFree86 4.5.99.16</A>
+<LI><A HREF="#xterm_206">Patch #206 - 2005/11/3 - XFree86 4.5.99.15</A>
+<LI><A HREF="#xterm_205">Patch #205 - 2005/9/18 - XFree86 4.5.99.12</A>
 <LI><A HREF="#xterm_204">Patch #204 - 2005/8/4 - XFree86 4.5.99.9</A>
 <LI><A HREF="#xterm_203">Patch #203 - 2005/7/6 - XFree86 4.5.99.7</A>
 <LI><A HREF="#xterm_202">Patch #202 - 2005/5/2 - XFree86 4.5.99.3</A>
@@ -253,6 +257,267 @@ is the latest version of this file.
 <LI><A HREF="#xterm_01">Patch #1 - 1996/1/6</A>
 </UL>
 
+<H1><A NAME="xterm_208">Patch #208 - 2006/1/3 - XFree86 4.5.99.19</A></H1>
+<ul>
+	<li>add <code>charClass</code> resource to <code>XTerm.ad</code> and
+	    <code>UXTerm.ad</code> which simplifies selecting URLs (prompted
+	    by Kirill Ponomarew).
+
+	<li>modify install rule for <code>uxterm</code> to account for the
+	    <code>--program-prefix</code>, etc., options by invoking the
+	    transformed name of xterm rather than simply "xterm".
+
+	<li>modify configure <code>--with-app-defaults</code> option to allow
+	    <code>--without-app-defaults</code>.
+
+	<li>add configure <code>--with-symlink</code> option to make it simpler
+	    to install successive versions of <code>xterm</code> renamed using
+	    the <code>--program-prefix</code>, etc., options with a symbolic
+	    link pointing to the most recent.
+
+	<li>make <code>-iconic</code> option work with toolbar configuration
+	    (GenToo #113604).
+
+	<li>suppress <code>lastlog</code> feature for 64-bit Solaris
+	    configuration since that platform provides only a 32-bit interface
+	    (report by Peter Bray).
+
+	<li>fix memory reallocation for the "UTF-8" menu entry when xterm is
+	    started using the <code>+u8</code> option (reported by Jan Willem
+	    Stumpel).
+
+	<li>add a configure check for the actual path of <code>luit</code>,
+	    to work around broken <code>imake</code> configurations.
+
+	<li>add a configure check for <code>pkg-config</code> (Redhat Bugzilla
+	    #173541).
+
+	<li>modify install-rule for <code>uxterm</code> to omit executable
+	    suffix, e.g., for Cygwin.
+
+	<li>modify <code>sinstall.sh</code> to work around quirks in Cygwin
+	    configuration.
+</ul>
+
+<H1><A NAME="xterm_207">Patch #207 - 2005/11/13 - XFree86 4.5.99.16</A></H1>
+<ul>
+	<li>enable <code>lastlogx</code> support for NetBSD (was added, but
+	    not enabled in <a href="#xterm_186">patch #186</a>).
+
+	<li>work around broken <code>lastlog.h</code> in glibc 2.3.5, which
+	    includes <code>utmp.h</code>.
+
+	<li>revert part of recent XFree86 Imakefile change, restoring the
+	    <code>-I.</code> needed for <code>xmkmf</code> builds of xterm
+	    (XFree86 Bugzilla #1633, reports by Alexander Pohoyda and Matthieu
+	    Herrb).
+
+	<li>change compiled-in default for <code>printerCommand</code>
+	    resource to an empty string.  People who want to use the
+	    printer should be able to read the manual (Debian #311490).
+
+	<li>modify <code>Imakefile</code> to work around old problems in
+	    <code>imake</code> configuration to allow test-builds using
+	    <code>xmkmf</code> on Linux.  (This was not noticed since several
+	    releases had broken definitions relating to Xft which were harder
+	    to work around).
+
+	<li>link <code>resize</code> for SCO platforms (Kean Johnston).
+</ul>
+
+<H1><A NAME="xterm_206">Patch #206 - 2005/11/3 - XFree86 4.5.99.15</A></H1>
+<ul>
+	<li>add configure <code>--with-app-defaults</code> option to allow
+	    app-defaults directory for install-rules to be customized.
+
+	<li>remove default translations for <code>dabbrev-expand()</code>
+	    due to conflicts with existing keyboard arrangements.
+
+	<li>remove redundant check for <code>_NET_WM_PID</code>
+	    (report by Emanuele Giaquinta).
+
+	<li>set icon border width explicitly to work around fvwm problem
+	    with active icon resizing (report by Steve Morris, analysis
+	    by Dominik Vogt).
+
+	<li>modify resource files to make the font-resources a little
+	    more specific, e.g., changing "*VT100*" to "*VT100.", to
+	    make the distinction between VT100.font and VT100.utf8Fonts.font
+	    sharper, in case a packager modifies one of those.
+
+	<li>expanded comments in <code>UXTerm.ad</code> regarding the
+	    font resources (Debian #319179).
+
+	<li>add <code>--enable-narrowproto</code> configure option to
+	    accommodate Xorg "modular" build (report by Stephan Hermann,
+	    GenToo #17220).
+
+	<li>fix typo in xterm.man description of <code>+wf</code> (patch
+	    by Tobias Stoeckmann).
+
+	<li>add <code>scrollBarBorder</code> resource (request by Floyd L
+	    Davidson).
+
+	<li>modify <code>xterm-new</code> terminfo entry to use capabilities
+	    for shifted scroll forward/reverse as shifted cursor up/down.
+
+	<li>correct updating of checkmark for toolbar entry in popup menu
+	    (report by Emanuele Giaquinta).
+
+	<li>fix ifdef's to allow compiling with toolbar and without tek4014
+	    (patch by Emanuele Giaquinta).
+
+	<li>use <code>openpty()</code> for Darwin port (patch by Emanuele
+	    Giaquinta).
+
+	<li>fix GenToo #90697 a different way, postponing the logic in
+	    <code>SetupToolbar</code> until the toolbar is actually needed,
+	    i.e., the <code>+tb</code> option is handled as expected.
+
+	<li>revert fix made in <a href="#xterm_203">patch #203</a> for GenToo
+	    #90697.  That introduced a problem with the control mouse
+	    click-popups, while most of the performance problems can be
+	    resolved by restricting the menu fonts (report by Emanuele
+	    Giaquinta).
+
+	<li>fix a file-descriptor leak when calling <code>openpty()</code>
+	    (OpenBSD system/4561).
+
+	<li>make a special case of resizing work like vt100: a hard reset
+	    also resets the 132/80 mode.  The code to support this was
+	    present since X11R5, but not used because the corresponding
+	    initial state of the <code>-132</code> option was not saved.
+
+	<li>restore window manager hints after <code>XtMakeResizeRequest()</code>
+	    calls.  One instance from <a href="#xterm_205">patch #205</a>
+	    resulted in the window manager displaying pixels rather than
+	    than characters after selecting a different font size (FreeBSD
+	    ports/87424).
+
+	<li>remove special case for Darwin in CF_XOPEN_SOURCE
+	    (Emanuele Giaquinta).
+
+	<li>modify parsing of control sequence <code>CSI&nbsp;T</code>
+	    to allow scroll-down
+	    to be sent while mouse tracking is enabled (request by
+	    D Hugh Redelmeier). 
+
+	<li>correct termcap "me" (mode-end) string so it does not modify the
+	    alternate character set (report by Andrey Chernov).
+
+	<li>correct size-comparison in HandleInterpret() broken in changes
+	    from <a href="#xterm_201">patch #201</a> to allocate input
+	    buffer (Debian #334317).
+
+	<li>amend adjustments for scrollbar layout from
+	    <a href="#xterm_204">patch #204</a> to make
+	    this apply only to the toolbar configuration.  In the non-toolbar
+	    configuration, the resulting scrollbar was shifted by its
+	    borderwidth (report by Matthieu Herrb).
+
+	<li>add select-cursor-extend() action.
+
+	<li>fix some broken href's in xterm.log.html, and typo in the
+	    INSTALL file (report/patch by David Mart&#237;nez Moreno).
+
+	<li>modify <code>Imakefile</code> to use setgid mode for installing
+	    with Linux, OpenBSD and FreeBSD.
+
+	<li>add configure --with-setuid and --with-reference options to
+	    allow packagers more flexibility in customizing install
+	    permissions.
+
+	<li>generalize and make optional (configure --with-utmp-setgid)
+	    the change made for XFree86 Bugzilla #878 in
+	    <a href="#xterm_205">patch #205</a>
+	    (FreeBSD bug report #ports/86663).
+</ul>
+
+<H1><A NAME="xterm_205">Patch #205 - 2005/9/18 - XFree86 4.5.99.12</A></H1>
+<ul>
+	<li>correct a typo in CF_FUNC_TGETENT introduced in <a
+	    href="#xterm_198">patch #198</a> fix for Gentoo #69926.
+
+	<li>implement logic in termcap query to process multiple parameters
+	    as documented in ctlseqs.ms
+
+	<li>fix buffer size used for termcap query, which was not long enough
+	    for the terminfo "colors" name (patch by Bradd W. Szonye).
+
+	<li>add configure option --enable-readline-mouse, which turns on the
+	    experimental OPT_READLINE code (patch by Ilya Zakharevich).
+
+	<li>for FreeBSD, drop setuid privileges after startup
+	    (XFree86 Bugzilla #878, report/patch by Alexander Pohoyda)
+
+	<li>add menu entry (alt-esc) and corresponding action (alt-sends-esc)
+	    to toggle the <code>eightBitInput</code> resource setting.
+
+	<li>generate configure script with autoconf 2.52 (patched) to use
+	    the feature therein which forces the script's locale to POSIX
+	    (Gentoo Bugzilla #105369).
+
+	<li>modify computation of rows/columns on resize to avoid extending
+	    beyond the given limits, e.g., if resizing in response to a
+	    "maximize" in Gnome or KDE which do not use the window manager
+	    hints for this case (Debian #289123, Novell #61153).
+
+	<li>modifications to work with z/OS 1.4 (Paul Giordano).
+
+	<li>improve error-reporting when chown/chmod of the pseudo-terminal
+	    fails, e.g., if a copy of xterm which was designed to work with
+	    old-style pseudo-terminals is not installed setuid or setgid
+	    (report by Jeremy C. Reed).
+
+	<li>patches from Emanuele Giaquinta:
+	    <ul>
+	    <li>ctlseqs.ms says that primary and secondary DA accept a
+	        nonzero parameter, which is incorrect.  Also modify code
+		to agree with this.
+
+	    <li>correct a comment in 88colres.pl
+
+	    <li>ctlseqs.ms says that the DEC Set/Reset control sequences for
+		the backarrow key make it send DEL/BS, respectively, while it's
+		the opposite.
+
+	    <li>update the menu entries for the metaSendsEscape, deleteIsDEL
+		and numLock resources when changing them with the corresponding
+		DEC Set/Reset control sequences.
+	    </ul>
+
+	<li>fixes for configure script:
+	    <ul>
+	    <li>add special case for QNX, defining _QNX_SOURCE.
+	    <li>check for preprocessors which do not perform -U and -D options
+	        in the given order.
+	    <li>improve macro to determine gcc version
+	    <li>improve check for Intel compiler and related warning options
+	    </ul>
+
+	<li>update config.guess, config.sub
+
+	<li>improve fix from <a href="#xterm_198">patch #198</a> for
+	    <code>Cleanup()</code> by ensuring it is not called from the
+	    SIGCHLD handler (patch from OpenBSD by Todd Miller).
+
+	<li>eliminate a retry for a better-matching bold font, to work around
+	    recent font server changes.
+
+	<li>fixes for Novell #113277:
+	    <ul>
+	    <li>specify weight for wide font which may be derived from
+	        normal fontname.
+	    <li>cache the derived wide- and widebolt-fontnames.
+	    </ul>
+
+	<li>workaround for GenToo Bugzilla #100728.
+
+	<li>add menubar's border width to layout computation.  Normally this
+	    is zero, but patterns such as <code>XTerm*borderWidth:1</code>
+	    would give poor layout for the toolbar configuration.
+</ul>
+
 <H1><A NAME="xterm_204">Patch #204 - 2005/8/4 - XFree86 4.5.99.9</A></H1>
 <ul>
 	<li>work around quirk in shell which allowed user to "run" uxterm
@@ -299,7 +564,7 @@ is the latest version of this file.
 	<li>fix to build on Darwin 8.x, which no longer provides
 	    <code>setpgrp()</code> (patch by Min Sik Kim).
 
-	<li>adapted fixes for Legend (SCO) from diffs attached to 
+	<li>adapted fixes for Legend (SCO) from diffs attached to
 	    Freedesktop.Org Bugzilla #3180.
 
 	<li>fix typo in xterm manpage description of <code>-ls</code> option
@@ -335,12 +600,12 @@ is the latest version of this file.
 	<li>fix an off-by-one error parsing <code>-S/nn</code> option
 	    (Debian #311438, report/fix by Peter Chubb).
 
-	<li>fix an initialization bug from 
-	    <a href="xterm_201">patch #201</a> that broke logging
+	<li>fix an initialization bug from
+	    <a href="#xterm_201">patch #201</a> that broke logging
 	    (report by Rodney Thayer).
 
 	<li>amend change to command-line processing in
-	    <a href="xterm_201">patch #201</a> to avoid
+	    <a href="#xterm_201">patch #201</a> to avoid
 	    conflict with <code>-e</code> option (report by Servatius Brandt).
 
 	<li>suppress configure check for <code>_XOPEN_SOURCE</code> on
@@ -541,7 +806,7 @@ is the latest version of this file.
 	<li>improve <code>$WINDOWID</code> for configuration with toolbar by
 	    making it refer to the top-level shell rather than the parent of
 	    the current window.  For that case, the parent is a form widget,
-	    which does not have a name, which made the <code>$WINDOWID</code> 
+	    which does not have a name, which made the <code>$WINDOWID</code>
 	    not very useful as a parameter for <code>xwininfo</code>
 	    (suggested by Dave Bodenstab).
 
@@ -1008,7 +1273,7 @@ is the latest version of this file.
 
 	<li>replace ifdef's using <code>SCO</code>, <code>sco</code> and
 	    <code>SCO325</code> with <code>__SCO__</code>
-	    (XFree86 Bugzilla #1301, Kean Johnson).
+	    (XFree86 Bugzilla #1301, Kean Johnston).
 	    But ensure that it still builds on platforms where this symbol
 	    is not defined.
 

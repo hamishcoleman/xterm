@@ -1,14 +1,14 @@
-/* $XTermId: misc.c,v 1.270 2005/08/05 01:25:40 tom Exp $ */
+/* $XTermId: misc.c,v 1.282 2006/01/04 02:10:25 tom Exp $ */
 
 /*
  *	$Xorg: misc.c,v 1.3 2000/08/17 19:55:09 cpqbld Exp $
  */
 
-/* $XFree86: xc/programs/xterm/misc.c,v 3.99 2005/08/05 01:25:40 dickey Exp $ */
+/* $XFree86: xc/programs/xterm/misc.c,v 3.102 2006/01/04 02:10:25 dickey Exp $ */
 
 /*
  *
- * Copyright 1999-2004,2005 by Thomas E. Dickey
+ * Copyright 1999-2005,2006 by Thomas E. Dickey
  *
  *                        All Rights Reserved
  *
@@ -148,6 +148,9 @@ xevents(void)
     XEvent event;
     XtInputMask input_mask;
     TScreen *screen = &term->screen;
+
+    if (need_cleanup)
+	Cleanup(0);
 
     if (screen->scroll_amt)
 	FlushScroll(screen);
@@ -328,7 +331,7 @@ HandleInterpret(Widget w GCC_UNUSED,
 	int used = VTbuffer->next - VTbuffer->buffer;
 	int have = VTbuffer->last - VTbuffer->buffer;
 
-	if (have - used + need < (int) sizeof(VTbuffer->buffer)) {
+	if (have - used + need < BUF_SIZE) {
 
 	    fillPtyData(&term->screen, VTbuffer, value, (int) strlen(value));
 
@@ -343,6 +346,7 @@ DoSpecialEnterNotify(XEnterWindowEvent * ev)
 {
     TScreen *screen = &term->screen;
 
+    TRACE(("DoSpecialEnterNotify(%d)\n", screen->select));
 #ifdef ACTIVEWINDOWINPUTONLY
     if (ev->window == XtWindow(XtParent(CURRENT_EMU(screen))))
 #endif
@@ -360,6 +364,7 @@ HandleEnterWindow(Widget w GCC_UNUSED,
 		  Boolean * cont GCC_UNUSED)
 {
     /* NOP since we handled it above */
+    TRACE(("HandleEnterWindow ignored\n"));
 }
 
 static void
@@ -367,6 +372,7 @@ DoSpecialLeaveNotify(XEnterWindowEvent * ev)
 {
     TScreen *screen = &term->screen;
 
+    TRACE(("DoSpecialLeaveNotify(%d)\n", screen->select));
 #ifdef ACTIVEWINDOWINPUTONLY
     if (ev->window == XtWindow(XtParent(CURRENT_EMU(screen))))
 #endif
@@ -384,6 +390,7 @@ HandleLeaveWindow(Widget w GCC_UNUSED,
 		  Boolean * cont GCC_UNUSED)
 {
     /* NOP since we handled it above */
+    TRACE(("HandleLeaveWindow ignored\n"));
 }
 
 /*ARGSUSED*/
@@ -396,10 +403,28 @@ HandleFocusChange(Widget w GCC_UNUSED,
     XFocusChangeEvent *event = (XFocusChangeEvent *) ev;
     TScreen *screen = &term->screen;
 
+    TRACE(("HandleFocusChange type=%d, mode=%d, detail=%d\n",
+	   event->type,
+	   event->mode,
+	   event->detail));
+
     if (event->type == FocusIn) {
+	/*
+	 * NotifyNonlinear only happens (on FocusIn) if the pointer was not in
+	 * one of our windows.  Use this to reset a case where one xterm is
+	 * partly obscuring another, and X gets (us) confused about whether the
+	 * pointer was in the window.  In particular, this can happen if the
+	 * user is resizing the obscuring window, causing some events to not be
+	 * delivered to the obscured window.
+	 */
+	if (event->detail == NotifyNonlinear
+	    && (screen->select & INWINDOW) != 0) {
+	    unselectwindow(screen, INWINDOW);
+	}
 	selectwindow(screen,
-		     (event->detail == NotifyPointer) ? INWINDOW :
-		     FOCUS);
+		     ((event->detail == NotifyPointer)
+		      ? INWINDOW
+		      : FOCUS));
     } else {
 	/*
 	 * XGrabKeyboard() will generate FocusOut/NotifyGrab event that we want
@@ -407,8 +432,9 @@ HandleFocusChange(Widget w GCC_UNUSED,
 	 */
 	if (event->mode != NotifyGrab) {
 	    unselectwindow(screen,
-			   (event->detail == NotifyPointer) ? INWINDOW :
-			   FOCUS);
+			   ((event->detail == NotifyPointer)
+			    ? INWINDOW
+			    : FOCUS));
 	}
 	if (screen->grabbedKbd && (event->mode == NotifyUngrab)) {
 	    Bell(XkbBI_Info, 100);
@@ -422,6 +448,8 @@ HandleFocusChange(Widget w GCC_UNUSED,
 static void
 selectwindow(TScreen * screen, int flag)
 {
+    TRACE(("selectwindow(%d) flag=%d\n", screen->select, flag));
+
 #if OPT_TEK4014
     if (screen->TekEmu) {
 	if (!Ttoggled)
@@ -448,6 +476,8 @@ selectwindow(TScreen * screen, int flag)
 static void
 unselectwindow(TScreen * screen, int flag)
 {
+    TRACE(("unselectwindow(%d) flag=%d\n", screen->select, flag));
+
     if (screen->always_highlight)
 	return;
 
@@ -770,8 +800,9 @@ HandleIconify(Widget gw,
 }
 
 int
-QueryMaximize(TScreen * screen, unsigned *width, unsigned *height)
+QueryMaximize(XtermWidget termw, unsigned *width, unsigned *height)
 {
+    TScreen *screen = &termw->screen;
     XSizeHints hints;
     long supp = 0;
     Window root_win;
@@ -781,7 +812,7 @@ QueryMaximize(TScreen * screen, unsigned *width, unsigned *height)
     unsigned root_depth;
 
     if (XGetGeometry(screen->display,
-		     XDefaultRootWindow(screen->display),
+		     RootWindowOfScreen(XtScreen(termw)),
 		     &root_win,
 		     &root_x,
 		     &root_y,
@@ -829,7 +860,7 @@ RequestMaximize(XtermWidget termw, int maximize)
 
     if (maximize) {
 
-	if (QueryMaximize(screen, &root_width, &root_height)) {
+	if (QueryMaximize(termw, &root_width, &root_height)) {
 
 	    if (XGetWindowAttributes(screen->display,
 				     WMFrameWindow(termw),
@@ -1512,7 +1543,7 @@ ChangeAnsiColorRequest(XtermWidget pTerm,
 
 #if OPT_PASTE64
 static void
-ManipulateSelectionData(TScreen * screen, Char * buf, int final)
+ManipulateSelectionData(TScreen * screen, char *buf, int final)
 {
 #define PDATA(a,b) { a, #b }
     static struct {
@@ -1531,7 +1562,7 @@ ManipulateSelectionData(TScreen * screen, Char * buf, int final)
 	    PDATA('7', CUT_BUFFER7),
     };
 
-    Char *base = buf;
+    char *base = buf;
     Cardinal j, n = 0;
     char **select_args = 0;
 
@@ -1575,7 +1606,7 @@ ManipulateSelectionData(TScreen * screen, Char * buf, int final)
 	    TRACE(("Setting selection with %s\n", buf));
 	    ClearSelectionBuffer();
 	    while (*buf != '\0')
-		AppendToSelectionBuffer(screen, *buf++);
+		AppendToSelectionBuffer(screen, CharOf(*buf++));
 	    CompleteSelection(select_args, n);
 	}
 	free(select_args);
@@ -1704,7 +1735,7 @@ do_osc(Char * oscbuf, unsigned len GCC_UNUSED, int final)
 	    unparseputc1(OSC, screen->respond);
 	    unparseputs("50", screen->respond);
 
-	    if ((buf = screen->menu_font_names[num]) != 0) {
+	    if ((buf = screen->MenuFontName(num)) != 0) {
 		unparseputc(';', screen->respond);
 		unparseputs(buf, screen->respond);
 	    }
@@ -1749,7 +1780,7 @@ do_osc(Char * oscbuf, unsigned len GCC_UNUSED, int final)
 
 		if (num < 0
 		    || num > fontMenu_lastBuiltin
-		    || (buf = screen->menu_font_names[num]) == 0) {
+		    || (buf = screen->MenuFontName(num)) == 0) {
 		    Bell(XkbBI_MinorError, 0);
 		    break;
 		}
@@ -2123,38 +2154,56 @@ do_dcs(Char * dcsbuf, size_t dcslen)
 	    unsigned state;
 	    int code;
 	    char *tmp;
+	    char *parsed = ++cp;
 
-	    ++cp;
-	    code = xtermcapKeycode(cp, &state);
 	    unparseputc1(DCS, screen->respond);
+
+	    code = xtermcapKeycode(&parsed, &state);
 	    unparseputc(code >= 0 ? '1' : '0', screen->respond);
+
 	    unparseputc('+', screen->respond);
 	    unparseputc('r', screen->respond);
-	    for (tmp = cp; *tmp; ++tmp)
-		unparseputc(*tmp, screen->respond);
-	    if (code >= 0) {
-		unparseputc('=', screen->respond);
-		screen->tc_query = code;
-		/* XK_COLORS is a fake code for the "Co" entry (maximum
-		 * number of colors) */
-		if (code == XK_COLORS) {
+
+	    while (*cp != 0) {
+		if (cp == parsed)
+		    break;	/* no data found, error */
+
+		for (tmp = cp; tmp != parsed; ++tmp)
+		    unparseputc(*tmp, screen->respond);
+
+		if (code >= 0) {
+		    unparseputc('=', screen->respond);
+		    screen->tc_query = code;
+		    /* XK_COLORS is a fake code for the "Co" entry (maximum
+		     * number of colors) */
+		    if (code == XK_COLORS) {
 # if OPT_256_COLORS
-		    unparseputc('2', screen->respond);
-		    unparseputc('5', screen->respond);
-		    unparseputc('6', screen->respond);
+			unparseputc('2', screen->respond);
+			unparseputc('5', screen->respond);
+			unparseputc('6', screen->respond);
 # elif OPT_88_COLORS
-		    unparseputc('8', screen->respond);
-		    unparseputc('8', screen->respond);
+			unparseputc('8', screen->respond);
+			unparseputc('8', screen->respond);
 # else
-		    unparseputc('1', screen->respond);
-		    unparseputc('6', screen->respond);
+			unparseputc('1', screen->respond);
+			unparseputc('6', screen->respond);
 # endif
+		    } else {
+			XKeyEvent event;
+			event.state = state;
+			Input(&(term->keyboard), screen, &event, False);
+		    }
+		    screen->tc_query = -1;
 		} else {
-		    XKeyEvent event;
-		    event.state = state;
-		    Input(&(term->keyboard), screen, &event, False);
+		    break;	/* no match found, error */
 		}
-		screen->tc_query = -1;
+
+		cp = parsed;
+		if (*parsed == ';') {
+		    unparseputc(*parsed++, screen->respond);
+		    cp = parsed;
+		    code = xtermcapKeycode(&parsed, &state);
+		}
 	    }
 	    unparseputc1(ST, screen->respond);
 	}
@@ -2659,6 +2708,7 @@ Cleanup(int code)
 	}
 
 	cleaning = True;
+	need_cleanup = FALSE;
 
 	TRACE(("Cleanup %d\n", code));
 
@@ -2852,6 +2902,7 @@ set_vt_visibility(Bool on)
 #if OPT_TOOLBAR
 	    /* we need both of these during initialization */
 	    XtMapWidget(SHELL_OF(term));
+	    ShowToolbar(resource.toolBar);
 #endif
 	    screen->Vshow = True;
 	}
@@ -3003,6 +3054,12 @@ sortedOptDescs(XrmOptionDescRec * descs, Cardinal res_count)
 {
     static XrmOptionDescRec *res_array = 0;
 
+#if OPT_TRACE || defined(NO_LEAKS)
+    if (descs == 0 && res_array != 0) {
+	free(res_array);
+	res_array = 0;
+    } else
+#endif
     if (res_array == 0) {
 	Cardinal j;
 
@@ -3026,6 +3083,13 @@ sortedOpts(OptionHelp * options, XrmOptionDescRec * descs, Cardinal numDescs)
 {
     static OptionHelp *opt_array = 0;
 
+#if OPT_TRACE || defined(NO_LEAKS)
+    if (descs == 0 && opt_array != 0) {
+	sortedOptDescs(descs, numDescs);
+	free(opt_array);
+	opt_array = 0;
+    } else
+#endif
     if (opt_array == 0) {
 	Cardinal opt_count, j;
 #if OPT_TRACE

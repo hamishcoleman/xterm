@@ -1,7 +1,7 @@
-/* $XTermId: xtermcfg.hin,v 1.139 2005/07/07 00:46:15 tom Exp $ */
+/* $XTermId: xtermcfg.hin,v 1.145 2006/01/04 02:10:28 tom Exp $ */
 
 /*
- * $XFree86: xc/programs/xterm/xtermcfg.hin,v 3.55 2005/07/07 00:46:15 dickey Exp $
+ * $XFree86: xc/programs/xterm/xtermcfg.hin,v 3.58 2006/01/04 02:10:28 dickey Exp $
  */
 
 /************************************************************
@@ -77,6 +77,7 @@ OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 #undef HAVE_X11_SUNKEYSYM_H	/* AC_CHECK_HEADERS(X11/Sunkeysym.h) */
 #undef HAVE_X11_XPOLL_H		/* AC_CHECK_HEADERS(X11/Xpoll.h) */
 #undef HAVE_XKB_BELL_EXT	/* CF_XKB_BELL_EXT */
+#undef LUIT_PATH		/* CF_ARG_ENABLE(luit) */
 #undef NO_ACTIVE_ICON		/* CF_ARG_DISABLE(active-icon) */
 #undef OPT_256_COLORS		/* CF_ARG_ENABLE(256-color) */
 #undef OPT_88_COLORS		/* CF_ARG_ENABLE(88-color) */
@@ -118,6 +119,7 @@ OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 #undef OPT_ZICONBEEP		/* CF_ARG_DISABLE(ziconbeep) */
 #undef OWN_TERMINFO_DIR		/* AC_ARG_WITH(own-terminfo) */
 #undef SCROLLBAR_RIGHT		/* CF_ARG_ENABLE(rightbar) */
+#undef SIG_ATOMIC_T		/* CF_SIG_ATOMIC_T */
 #undef SVR4			/* CF_SVR4, imake */
 #undef SYSV			/* CF_SYSV, imake */
 #undef TIME_WITH_SYS_TIME	/* AC_HEADER_TIME */
@@ -131,6 +133,7 @@ OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 #undef USE_TERMCAP		/* CF_FUNC_TGETENT */
 #undef USE_TERMINFO		/* CF_FUNC_TGETENT */
 #undef USE_TTY_GROUP		/* CF_TTY_GROUP */
+#undef USE_UTMP_SETGID		/* AC_ARG_WITH(utmp-setgid) */
 #undef USE_UTEMPTER		/* CF_UTEMPTER */
 #undef UTMPX_FOR_UTMP		/* CF_UTMP */
 #undef XRENDERFONT		/* CF_X_FREETYPE */

@@ -1,10 +1,10 @@
-/* $XTermId: xterm.h,v 1.345 2005/08/05 01:25:40 tom Exp $ */
+/* $XTermId: xterm.h,v 1.360 2006/01/04 02:10:27 tom Exp $ */
 
-/* $XFree86: xc/programs/xterm/xterm.h,v 3.107 2005/08/05 01:25:40 dickey Exp $ */
+/* $XFree86: xc/programs/xterm/xterm.h,v 3.110 2006/01/04 02:10:27 dickey Exp $ */
 
 /************************************************************
 
-Copyright 1999-2004,2005 by Thomas E. Dickey
+Copyright 1999-2005,2006 by Thomas E. Dickey
 
                         All Rights Reserved
 
@@ -286,9 +286,11 @@ extern int errno;
 # endif
 #endif
 
-#ifdef USE_SYS_SELECT_H
-
+/* these may be needed for sig_atomic_t */
 #include <sys/types.h>
+#include <signal.h>
+
+#ifdef USE_SYS_SELECT_H
 
 #if defined(USE_XPOLL_H) && defined(AIXV3) && defined(NFDBITS)
 #undef NFDBITS			/* conflict between X11/Xpoll.h and sys/select.h */
@@ -408,6 +410,7 @@ extern char **environ;
 #define XtNrightScrollBar	"rightScrollBar"
 #define XtNsaveLines		"saveLines"
 #define XtNscrollBar		"scrollBar"
+#define XtNscrollBarBorder	"scrollBarBorder"
 #define XtNscrollKey		"scrollKey"
 #define XtNscrollLines		"scrollLines"
 #define XtNscrollPos		"scrollPos"
@@ -525,6 +528,7 @@ extern char **environ;
 #define XtCRightScrollBar	"RightScrollBar"
 #define XtCSaveLines		"SaveLines"
 #define XtCScrollBar		"ScrollBar"
+#define XtCScrollBarBorder	"ScrollBarBorder"
 #define XtCScrollCond		"ScrollCond"
 #define XtCScrollLines		"ScrollLines"
 #define XtCScrollPos		"ScrollPos"
@@ -604,25 +608,26 @@ extern void dorefresh (void);
 	    XSelectInput(XtDisplay((t)), XtWindow((t)), (long) (s)->event_mask); }
 
 extern Bool SendMousePosition (Widget w, XEvent* event);
-extern void DiredButton               PROTO_XT_ACTIONS_ARGS;
+extern void DiredButton                PROTO_XT_ACTIONS_ARGS;
 extern void DisownSelection (XtermWidget termw);
-extern void HandleGINInput            PROTO_XT_ACTIONS_ARGS;
-extern void HandleInsertSelection     PROTO_XT_ACTIONS_ARGS;
-extern void HandleKeyboardSelectEnd   PROTO_XT_ACTIONS_ARGS;
-extern void HandleKeyboardSelectStart PROTO_XT_ACTIONS_ARGS;
-extern void HandleKeyboardStartExtend PROTO_XT_ACTIONS_ARGS;
-extern void HandleSecure              PROTO_XT_ACTIONS_ARGS;
-extern void HandleSelectEnd           PROTO_XT_ACTIONS_ARGS;
-extern void HandleSelectExtend        PROTO_XT_ACTIONS_ARGS;
-extern void HandleSelectSet           PROTO_XT_ACTIONS_ARGS;
-extern void HandleSelectStart         PROTO_XT_ACTIONS_ARGS;
-extern void HandleStartExtend         PROTO_XT_ACTIONS_ARGS;
-extern void ReadLineButton            PROTO_XT_ACTIONS_ARGS;
+extern void HandleGINInput             PROTO_XT_ACTIONS_ARGS;
+extern void HandleInsertSelection      PROTO_XT_ACTIONS_ARGS;
+extern void HandleKeyboardSelectEnd    PROTO_XT_ACTIONS_ARGS;
+extern void HandleKeyboardSelectExtend PROTO_XT_ACTIONS_ARGS;
+extern void HandleKeyboardSelectStart  PROTO_XT_ACTIONS_ARGS;
+extern void HandleKeyboardStartExtend  PROTO_XT_ACTIONS_ARGS;
+extern void HandleSecure               PROTO_XT_ACTIONS_ARGS;
+extern void HandleSelectEnd            PROTO_XT_ACTIONS_ARGS;
+extern void HandleSelectExtend         PROTO_XT_ACTIONS_ARGS;
+extern void HandleSelectSet            PROTO_XT_ACTIONS_ARGS;
+extern void HandleSelectStart          PROTO_XT_ACTIONS_ARGS;
+extern void HandleStartExtend          PROTO_XT_ACTIONS_ARGS;
+extern void ReadLineButton             PROTO_XT_ACTIONS_ARGS;
 extern void ResizeSelection (TScreen *screen, int rows, int cols);
 extern void ScrollSelection (TScreen* screen, int amount, Bool);
 extern void TrackMouse (int func, int startrow, int startcol, int firstrow, int lastrow);
 extern void TrackText (int frow, int fcol, int trow, int tcol);
-extern void ViButton                  PROTO_XT_ACTIONS_ARGS;
+extern void ViButton                   PROTO_XT_ACTIONS_ARGS;
 
 #if OPT_DEC_LOCATOR
 extern Bool SendLocatorPosition (Widget w, XEvent* event);
@@ -718,7 +723,7 @@ extern void VTInitModifiers(void);
 #endif
 
 #if OPT_TCAP_QUERY
-extern int xtermcapKeycode(char *params, unsigned *state);
+extern int xtermcapKeycode(char **params, unsigned *state);
 #endif
 
 /* main.c */
@@ -738,12 +743,17 @@ extern void first_map_occurred (void);
 extern SIGNAL_T Exit (int n);
 #endif
 
+#ifndef SIG_ATOMIC_T
+#define SIG_ATOMIC_T int
+#endif
+
 #if OPT_WIDE_CHARS
 extern int (*my_wcwidth)(wchar_t);
 #endif
 
 /* menu.c */
 extern void do_hangup          PROTO_XT_CALLBACK_ARGS;
+extern void repairSizeHints    (void);
 extern void show_8bit_control  (Bool value);
 
 /* misc.c */
@@ -768,14 +778,14 @@ extern void ChangeXprop (char *name);
 extern void Changename (char *name);
 extern void Changetitle (char *name);
 extern void Cleanup (int code);
-extern void HandleBellPropertyChange PROTO_XT_EV_HANDLER_ARGS;
-extern void HandleEightBitKeyPressed PROTO_XT_ACTIONS_ARGS;
-extern void HandleEnterWindow        PROTO_XT_EV_HANDLER_ARGS;
-extern void HandleFocusChange        PROTO_XT_EV_HANDLER_ARGS;
-extern void HandleInterpret          PROTO_XT_ACTIONS_ARGS;
-extern void HandleKeyPressed         PROTO_XT_ACTIONS_ARGS;
-extern void HandleLeaveWindow        PROTO_XT_EV_HANDLER_ARGS;
-extern void HandleStringEvent        PROTO_XT_ACTIONS_ARGS;
+extern void HandleBellPropertyChange   PROTO_XT_EV_HANDLER_ARGS;
+extern void HandleEightBitKeyPressed   PROTO_XT_ACTIONS_ARGS;
+extern void HandleEnterWindow          PROTO_XT_EV_HANDLER_ARGS;
+extern void HandleFocusChange          PROTO_XT_EV_HANDLER_ARGS;
+extern void HandleInterpret            PROTO_XT_ACTIONS_ARGS;
+extern void HandleKeyPressed           PROTO_XT_ACTIONS_ARGS;
+extern void HandleLeaveWindow          PROTO_XT_EV_HANDLER_ARGS;
+extern void HandleStringEvent          PROTO_XT_ACTIONS_ARGS;
 extern void Panic (char *s, int a);
 extern void Redraw (void);
 extern void ReverseOldColors (void);
@@ -798,15 +808,15 @@ extern void xt_error (String message);
 extern void xtermSetenv (char *var, char *value);
 
 #if OPT_DABBREV
-extern void HandleDabbrevExpand      PROTO_XT_ACTIONS_ARGS;
+extern void HandleDabbrevExpand        PROTO_XT_ACTIONS_ARGS;
 #endif
 
 #if OPT_MAXIMIZE
-extern int QueryMaximize (TScreen *screen, unsigned *width, unsigned *height);
-extern void HandleDeIconify          PROTO_XT_ACTIONS_ARGS;
-extern void HandleIconify            PROTO_XT_ACTIONS_ARGS;
-extern void HandleMaximize           PROTO_XT_ACTIONS_ARGS;
-extern void HandleRestoreSize        PROTO_XT_ACTIONS_ARGS;
+extern int QueryMaximize (XtermWidget termw, unsigned *width, unsigned *height);
+extern void HandleDeIconify            PROTO_XT_ACTIONS_ARGS;
+extern void HandleIconify              PROTO_XT_ACTIONS_ARGS;
+extern void HandleMaximize             PROTO_XT_ACTIONS_ARGS;
+extern void HandleRestoreSize          PROTO_XT_ACTIONS_ARGS;
 extern void RequestMaximize (XtermWidget termw, int maximize);
 #endif
 
@@ -844,6 +854,10 @@ extern void fillPtyData (TScreen *screen, PtyData *data, char *value, int length
 extern void initPtyData (PtyData **data);
 extern void trimPtyData (TScreen *screen, PtyData *data);
 
+#if OPT_TRACE || defined(NO_LEAKS)
+extern void noleaks_ptydata (void);
+#endif
+
 #if OPT_WIDE_CHARS
 extern Bool morePtyData (TScreen *screen, PtyData *data);
 extern Char *convertToUTF8 (Char *lp, unsigned c);
@@ -877,15 +891,15 @@ extern void ScrnDisownSelection (TScreen *screen);
 extern void xtermParseRect (TScreen *, int, int *, XTermRect *);
 
 #define ScrnClrFlag(screen, row, flag) \
-	SCRN_BUF_FLAGS(screen, row + screen->topline) = \
-		(Char *)((long)SCRN_BUF_FLAGS(screen, row + screen->topline) & ~ (flag))
+	SCRN_BUF_FLAGS(screen, ROW2INX(screen, row)) = \
+		(Char *)((long)SCRN_BUF_FLAGS(screen, ROW2INX(screen, row)) & ~ (flag))
 
 #define ScrnSetFlag(screen, row, flag) \
-	SCRN_BUF_FLAGS(screen, row + screen->topline) = \
-		(Char *)(((long)SCRN_BUF_FLAGS(screen, row + screen->topline) | (flag)))
+	SCRN_BUF_FLAGS(screen, ROW2INX(screen, row)) = \
+		(Char *)(((long)SCRN_BUF_FLAGS(screen, ROW2INX(screen, row)) | (flag)))
 
 #define ScrnTstFlag(screen, row, flag) \
-	((row + screen->savelines + screen->topline) >= 0 && ((long)SCRN_BUF_FLAGS(screen, row + screen->topline) & (flag)) != 0)
+	(ROW2INX(screen, row + screen->savelines) >= 0 && ((long)SCRN_BUF_FLAGS(screen, ROW2INX(screen, row)) & (flag)) != 0)
 
 #define ScrnClrBlinked(screen, row) ScrnClrFlag(screen, row, BLINK)
 #define ScrnSetBlinked(screen, row) ScrnSetFlag(screen, row, BLINK)
@@ -924,8 +938,8 @@ extern void ChangeToWide(TScreen * screen);
 
 /* scrollbar.c */
 extern void DoResizeScreen (XtermWidget xw);
-extern void HandleScrollBack PROTO_XT_ACTIONS_ARGS;
-extern void HandleScrollForward PROTO_XT_ACTIONS_ARGS;
+extern void HandleScrollBack           PROTO_XT_ACTIONS_ARGS;
+extern void HandleScrollForward        PROTO_XT_ACTIONS_ARGS;
 extern void ResizeScrollBar (XtermWidget xw);
 extern void ScrollBarDrawThumb (Widget scrollWidget);
 extern void ScrollBarOff (TScreen *screen);
@@ -977,7 +991,6 @@ extern void scrolling_copy_area (TScreen *screen, int firstline, int nlines, int
 extern void set_keyboard_type (xtermKeyboardType type, Bool set);
 extern void toggle_keyboard_type (xtermKeyboardType type);
 extern void update_keyboard_type (void);
-extern void xtermFixupSizes (XtermWidget xw, XSizeHints *sizehints);
 extern void xtermScroll (TScreen *screen, int amount);
 extern void xtermSizeHints (XtermWidget xw, XSizeHints *sizehints, int scrollbarWidth);
 

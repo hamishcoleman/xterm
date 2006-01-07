@@ -1,13 +1,13 @@
-/* $XTermId: scrollbar.c,v 1.106 2005/08/05 01:25:40 tom Exp $ */
+/* $XTermId: scrollbar.c,v 1.118 2006/01/04 02:10:27 tom Exp $ */
 
 /*
  *	$Xorg: scrollbar.c,v 1.4 2000/08/17 19:55:09 cpqbld Exp $
  */
 
-/* $XFree86: xc/programs/xterm/scrollbar.c,v 3.43 2005/08/05 01:25:40 dickey Exp $ */
+/* $XFree86: xc/programs/xterm/scrollbar.c,v 3.46 2006/01/04 02:10:27 dickey Exp $ */
 
 /*
- * Copyright 2000-2004,2005 by Thomas E. Dickey
+ * Copyright 2000-2005,2006 by Thomas E. Dickey
  *
  *                         All Rights Reserved
  *
@@ -81,7 +81,12 @@
  * The scrollbar's border overlaps the border of the vt100 window.  If there
  * is no border for the vt100, there can be no border for the scrollbar.
  */
-#define ScrollBarBorder(xw) (BorderWidth(xw) ? 1 : 0)
+#define SCROLLBAR_BORDER(xw) ((xw)->screen.scrollBarBorder)
+#if OPT_TOOLBAR
+#define ScrollBarBorder(xw) (BorderWidth(xw) ? SCROLLBAR_BORDER(xw) : 0)
+#else
+#define ScrollBarBorder(xw) SCROLLBAR_BORDER(xw)
+#endif
 
 /* Event handlers */
 
@@ -156,12 +161,14 @@ DoResizeScreen(XtermWidget xw)
      * to have time to completely rewrite xterm.
      */
 
-    TRACE(("ResizeScreen\n"));
+    TRACE(("DoResizeScreen\n"));
 
 #if 1				/* ndef nothack */
     /*
      * NOTE: the hints and the XtVaSetValues() must match.
      */
+    TRACE(("%s@%d -- ", __FILE__, __LINE__));
+    TRACE_WM_HINTS(xw);
     if (!XGetWMNormalHints(screen->display, XtWindow(SHELL_OF(xw)),
 			   &sizehints, &supp))
 	bzero(&sizehints, sizeof(sizehints));
@@ -173,7 +180,7 @@ DoResizeScreen(XtermWidget xw)
     sizehints.height = MaxRows(screen) * FontHeight(screen) + sizehints.min_height;
 #endif
 
-    xtermFixupSizes(xw, &sizehints);
+    XSetWMNormalHints(screen->display, XtWindow(SHELL_OF(xw)), &sizehints);
 
     reqWidth = MaxCols(screen) * FontWidth(screen) + min_wide;
     reqHeight = MaxRows(screen) * FontHeight(screen) + min_high;
@@ -185,19 +192,35 @@ DoResizeScreen(XtermWidget xw)
 
     geomreqresult = XtMakeResizeRequest((Widget) xw, reqWidth, reqHeight,
 					&repWidth, &repHeight);
+    TRACE(("scrollbar.c XtMakeResizeRequest %dx%d -> %dx%d (status %d)\n",
+	   reqHeight, reqWidth,
+	   repHeight, repWidth,
+	   geomreqresult));
 
     if (geomreqresult == XtGeometryAlmost) {
 	TRACE(("...almost, retry screensize %dx%d\n", repHeight, repWidth));
 	geomreqresult = XtMakeResizeRequest((Widget) xw, repWidth,
 					    repHeight, NULL, NULL);
     }
+#if 1				/* ndef nothack */
+    /*
+     * XtMakeResizeRequest() has the undesirable side-effect of clearing
+     * the window manager's hints, even on a failed request.  This would
+     * presumably be fixed if the shell did its own work.
+     */
+    if (sizehints.flags
+	&& repHeight
+	&& repWidth) {
+	sizehints.height = repHeight;
+	sizehints.width = repWidth;
+	TRACE_HINTS(&sizehints);
+	XSetWMNormalHints(screen->display, VShellWindow, &sizehints);
+    }
+#endif
     XSync(screen->display, FALSE);	/* synchronize */
     if (XtAppPending(app_con))
 	xevents();
 
-#ifndef nothack
-    XSetWMNormalHints(screen->display, XtWindow(SHELL_OF(xw)), &sizehints);
-#endif
 #ifndef NO_ACTIVE_ICON
     WhichVWin(screen) = saveWin;
 #endif /* NO_ACTIVE_ICON */
@@ -264,7 +287,7 @@ ScrollBarDrawThumb(Widget scrollWidget)
     TScreen *screen = &term->screen;
     int thumbTop, thumbHeight, totalHeight;
 
-    thumbTop = screen->topline + screen->savedlines;
+    thumbTop = ROW2INX(screen, screen->savedlines);
     thumbHeight = MaxRows(screen);
     totalHeight = thumbHeight + screen->savedlines;
 
@@ -505,9 +528,7 @@ ScrollTextTo(
     /*
      * screen->savedlines : Number of offscreen text lines,
      * MaxRows(screen)    : Number of onscreen  text lines,
-     * screen->topline    : -Number of lines above the last screen->max_row+1 lines
      */
-
     thumbTop = (int) (*topPercent * (screen->savedlines + MaxRows(screen)));
     newTopLine = thumbTop - screen->savedlines;
     WindowScroll(screen, newTopLine);
@@ -532,7 +553,7 @@ ScrollTextUpDownBy(
 	else if (pixels > 0)
 	    rowOnScreen = 1;
     }
-    newTopLine = screen->topline + rowOnScreen;
+    newTopLine = ROW2INX(screen, rowOnScreen);
     WindowScroll(screen, newTopLine);
 }
 
