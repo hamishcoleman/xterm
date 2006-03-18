@@ -1,8 +1,4 @@
-/* $XTermId: main.c,v 1.482 2006/01/04 02:10:25 tom Exp $ */
-
-#if !defined(lint) && 0
-static char *rid = "$Xorg: main.c,v 1.7 2001/02/09 02:06:02 xorgcvs Exp $";
-#endif /* lint */
+/* $XTermId: main.c,v 1.492 2006/03/13 01:27:59 tom Exp $ */
 
 /*
  *				 W A R N I N G
@@ -91,7 +87,7 @@ SOFTWARE.
 
 ******************************************************************/
 
-/* $XFree86: xc/programs/xterm/main.c,v 3.200 2006/01/04 02:10:25 dickey Exp $ */
+/* $XFree86: xc/programs/xterm/main.c,v 3.207 2006/03/13 01:27:59 dickey Exp $ */
 
 /* main.c */
 
@@ -175,7 +171,6 @@ static Bool IsPts = False;
 #endif
 
 #ifdef __CYGWIN__
-#define LASTLOG
 #define WTMP
 #endif
 
@@ -377,7 +372,7 @@ extern struct utmp *getutid __((struct utmp * _Id));
 #endif
 
 #if defined(USE_LASTLOG) && defined(HAVE_LASTLOG_H)
-#include <lastlog.h>		/* caution: glibc 2.3.5 includes utmp.h here */
+#include <lastlog.h>		/* caution: glibc includes utmp.h here */
 #endif
 
 #ifndef USE_LASTLOGX
@@ -695,8 +690,10 @@ static char etc_utmp[] = UTMP_FILENAME;
 #endif /* USE_SYSV_UTMP */
 
 #ifndef USE_UTEMPTER
-#ifdef USE_LASTLOG
+#if defined(USE_LASTLOG) && defined(USE_STRUCT_LASTLOG)
 static char etc_lastlog[] = LASTLOG_FILENAME;
+#else
+#undef USE_LASTLOG
 #endif
 
 #ifdef WTMP
@@ -1586,6 +1583,7 @@ int
 main(int argc, char *argv[]ENVP_ARG)
 {
     Widget form_top, menu_top;
+    Dimension menu_high;
     TScreen *screen;
     int mode;
     char *my_class = DEFCLASS;
@@ -2107,7 +2105,7 @@ main(int argc, char *argv[]ENVP_ARG)
 	break;
     }
 
-    SetupMenus(toplevel, &form_top, &menu_top);
+    SetupMenus(toplevel, &form_top, &menu_top, &menu_high);
 
     term = (XtermWidget) XtVaCreateManagedWidget("vt100", xtermWidgetClass,
 						 form_top,
@@ -2119,6 +2117,7 @@ main(int argc, char *argv[]ENVP_ARG)
 						 XtNright, XawChainRight,
 						 XtNtop, XawChainTop,
 						 XtNbottom, XawChainBottom,
+						 XtNmenuHeight, menu_high,
 #endif
 						 (XtPointer) 0);
     decode_keyboard_type(&resource);
@@ -3397,6 +3396,10 @@ spawn(void)
 			    /* make /dev/tty work */
 			    ioctl(ttyfd, TCSETCTTY, 0);
 #endif
+#if defined(__GNU__) && defined(TIOCSCTTY)
+			    /* make /dev/tty work */
+			    ioctl(ttyfd, TIOCSCTTY, 0);
+#endif
 #ifdef USE_SYSV_PGRP
 			    /* We need to make sure that we are actually
 			     * the process group leader for the pty.  If
@@ -4091,8 +4094,7 @@ spawn(void)
 #endif
 
 #ifdef USE_LASTLOG
-	    if (sizeof(lastlog.ll_time) == sizeof(time_t) &&	/* !Solaris */
-		term->misc.login_shell &&
+	    if (term->misc.login_shell &&
 		(i = open(etc_lastlog, O_WRONLY)) >= 0) {
 		bzero((char *) &lastlog, sizeof(struct lastlog));
 		(void) strncpy(lastlog.ll_line,
@@ -4572,7 +4574,7 @@ Exit(int n)
 	set_owner(ptydev, 0, 0, 0666U);
 #endif
     }
-#if OPT_TRACE || defined(NO_LEAKS)
+#ifdef NO_LEAKS
     if (n == 0) {
 	TRACE(("Freeing memory leaks\n"));
 	if (term != 0) {
@@ -4583,6 +4585,7 @@ Exit(int n)
 		TRACE(("destroyed top-level widget\n"));
 	    }
 	    sortedOpts(0, 0, 0);
+	    noleaks_charproc();
 	    noleaks_ptydata();
 #if OPT_WIDE_CHARS
 	    noleaks_CharacterClass();
