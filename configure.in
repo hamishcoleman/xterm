@@ -1,6 +1,6 @@
-dnl $XTermId: configure.in,v 1.208 2006/03/13 01:27:59 tom Exp $
+dnl $XTermId: configure.in,v 1.218 2006/07/15 12:21:26 tom Exp $
 dnl
-dnl $XFree86: xc/programs/xterm/configure.in,v 3.75 2006/03/13 01:27:59 dickey Exp $
+dnl $XFree86: xc/programs/xterm/configure.in,v 3.77 2006/06/19 00:36:51 dickey Exp $
 dnl
 dnl ---------------------------------------------------------------------------
 dnl
@@ -51,6 +51,7 @@ AC_PROG_CPP
 AC_GCC_TRADITIONAL
 AC_PROG_AWK
 AC_PROG_INSTALL
+AC_PROG_LN_S
 AC_ARG_PROGRAM
 AC_CHECK_PROGS(LINT, tdlint lint alint)
 
@@ -63,6 +64,7 @@ CF_ANSI_CC_CHECK
 AC_CONST
 CF_PROG_EXT
 CF_XOPEN_SOURCE
+CF_SIGWINCH
 
 ###	checks for header files
 AC_CHECK_HEADERS( \
@@ -82,6 +84,7 @@ AC_CHECK_TYPE(time_t, long)
 AC_TYPE_MODE_T
 AC_TYPE_PID_T
 AC_TYPE_UID_T
+AC_TYPE_OFF_T
 
 ###	checks for library functions
 AC_CHECK_FUNCS( \
@@ -100,6 +103,7 @@ AC_CHECK_FUNCS( \
 CF_FUNC_MEMMOVE
 CF_UTMP
 CF_STRUCT_LASTLOG
+CF_POSIX_SAVED_IDS
 
 CF_HELP_MESSAGE(Compile/Install Options:)
 CF_FUNC_TGETENT
@@ -184,6 +188,9 @@ if test "$use_utmp_setgid" != no ; then
 		CF_UTMP_GROUP
 	else
 		cf_cv_utmp_group=$use_utmp_setgid
+	fi
+	if test "$cf_cv_posix_saved_ids" != yes ; then
+		AC_MSG_ERROR(Your system does not support POSIX saved-ids)
 	fi
 	AC_DEFINE(USE_UTMP_SETGID)
 	SINSTALL_OPTS="$SINSTALL_OPTS g+s -g $cf_cv_utmp_group"
@@ -481,6 +488,16 @@ CF_ARG_ENABLE(sco-fkeys,
 AC_MSG_RESULT($enable_sco_fkeys)
 if test "$enable_sco_fkeys" = yes ; then
 	AC_DEFINE(OPT_SCO_FUNC_KEYS,1)
+fi
+
+AC_MSG_CHECKING(if you want support for Sun-style function keys)
+CF_ARG_DISABLE(sun-fkeys,
+	[  --disable-sun-fkeys     disable support for Sun-style function keys],
+	[enable_sun_fkeys=no],
+	[enable_sun_fkeys=yes])
+AC_MSG_RESULT($enable_sun_fkeys)
+if test "$enable_sun_fkeys" = no ; then
+	AC_DEFINE(OPT_SUN_FUNC_KEYS,0)
 fi
 
 AC_MSG_CHECKING(if you want support for internationalization)

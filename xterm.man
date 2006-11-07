@@ -1,4 +1,4 @@
-.\" $XTermId: xterm.man,v 1.334 2006/03/13 01:27:59 tom Exp $
+.\" $XTermId: xterm.man,v 1.357 2006/08/11 01:01:11 tom Exp $
 .\"
 .\" Copyright 1996-2005,2006 by Thomas E. Dickey
 .\"
@@ -53,7 +53,7 @@
 .\" other dealings in this Software without prior written authorization
 .\" from The Open Group.
 .\"
-.\" $XFree86: xc/programs/xterm/xterm.man,v 3.122 2006/03/13 01:27:59 dickey Exp $
+.\" $XFree86: xc/programs/xterm/xterm.man,v 3.126 2006/06/20 00:42:38 dickey Exp $
 .\"
 .\" updated by Thomas E. Dickey for XFree86, July 1996 - February 2006.
 .
@@ -586,9 +586,25 @@ This option resets the \fBallowC1Printable\fP resource.
 .TP 8
 .BI -kt " keyboardtype"
 This option sets the \fBkeyboardType\fP resource.
-Possible values include: ``hp'', ``sco'', ``sun'' and ``vt220''.
-The default value ``unknown'',
+Possible values include:
+``unknown'',
+``default'',
+``hp'',
+``sco'',
+``sun'' and
+``vt220''.
+.IP
+The value ``unknown'',
 causes the corresponding resource to be ignored.
+.IP
+The value ``default'',
+suppresses the associated resources
+.BR hpFunctionKeys ,
+.BR scoFunctionKeys ,
+.BR sunFunctionKeys
+and
+.BR sunKeyboard ,
+using the Sun/PC keyboard layout.
 .TP 8
 .B -l
 Turn logging on.
@@ -1639,6 +1655,12 @@ Note that setting \fBcolorMode\fR off
 disables all colors, including underlining.
 The default is ``false.''
 .TP 8
+.B "combiningChars (\fPclass\fB CombiningChars)"
+Specifies the number of wide-characters which can be stored in a cell
+to overstrike (combine) with the base character of the cell.
+This can be set to values in the range 0 to 4.
+The default is ``2''.
+.TP 8
 .B "ctrlFKeys (\fPclass\fB CtrlFKeys)"
 In VT220 keyboard mode (see \fBsunKeyboard\fP resource),
 specifies the amount by which to shift F1-F12 given a control modifier (CTRL).
@@ -1771,6 +1793,32 @@ If the application uses double-wide characters and this resource is not given,
 Specify the pointsize for fonts selected from the FreeType
 library if support for that library was compiled into \fIxterm\fR.
 The default is ``14.''
+On the \fBVT\ Fonts\fP menu, this corresponds to the \fIDefault\fP entry.
+You can specify the pointsize for TrueType fonts selected with the other
+size-related menu entries such as Medium, Huge, etc., by using one of
+the following resource values.
+If you do not specify a value,
+they default to ``0.0'',
+which causes \fIxterm\fP to use the ratio of font sizes from the bitmap
+font resources to obtain a TrueType pointsize.
+.TP 8
+.B "faceSize1 (\fPclass\fB FaceSize1)"
+Specifies the pointsize of the first alternative font.
+.TP 8
+.B "faceSize2 (\fPclass\fB FaceSize2)"
+Specifies the pointsize of the second alternative font.
+.TP 8
+.B "faceSize3 (\fPclass\fB FaceSize3)"
+Specifies the pointsize of the third alternative font.
+.TP 8
+.B "faceSize4 (\fPclass\fB FaceSize4)"
+Specifies the pointsize of the fourth alternative font.
+.TP 8
+.B "faceSize5 (\fPclass\fB FaceSize5)"
+Specifies the pointsize of the fifth alternative font.
+.TP 8
+.B "faceSize6 (\fPclass\fB FaceSize6)"
+Specifies the pointsize of the sixth alternative font.
 .TP 8
 .B "font (\fPclass\fB Font)"
 Specifies the name of the normal font.
@@ -1791,7 +1839,7 @@ xterm.vt100.font
 .IP
 and
 .RS
-xterm.vt100..utf8fonts.font
+xterm.vt100.utf8fonts.font
 .RE
 .IP
 which is probably not what you intended.
@@ -1825,13 +1873,22 @@ normal characters with spaces between them.
 .TP 8
 .B "forceBoxChars (\fPclass\fB ForceBoxChars)"
 Specifies whether \fIxterm\fP should assume the normal and bold fonts
-have VT100 line-drawing characters.
-The fixed-pitch fonts used by \fIxterm\fP
+have VT100 line-drawing characters:
+.RS
+.TP 5
+-
+The fixed-pitch ISO-8859-*-encoded fonts used by \fIxterm\fP
 normally have the VT100 line-drawing glyphs in cells 1-31.
 Other fixed-pitch fonts may be more attractive, but lack these glyphs.
-If ``false'', \fIxterm\fP will check for missing glyphs in cells 1-31
-and make line-drawing characters directly.
-If ``true'', \fIxterm\fP uses whatever is in cells 1-31 without checking.
+.TP
+-
+When using an ISO-10646-1 font and the \fBwideChars\fP resource is true,
+\fIxterm\fP uses the Unicode glyphs which match the VT100 line-drawing glyphs.
+.RE
+.IP
+If ``false'', \fIxterm\fP checks for missing glyphs in the font
+and makes line-drawing characters directly as needed.
+If ``true'', \fIxterm\fP uses whatever is in the font without checking.
 The default is ``false.''
 .TP 8
 .B "foreground (\fPclass\fB Foreground)"
@@ -2027,11 +2084,79 @@ The default is ``false.''
 Tells how to handle the special case where
 Control-, Shift-, Alt- or Meta-modifiers are used to add a parameter to
 the escape sequence returned by a cursor-key.
+The default is ``2'':
+.IP
 Set it to 0 to use the old/obsolete behavior.
+.br
 Set it to 1 to prefix modified sequences with CSI.
-Set it to 2 to force the modifier to be the second parameter.
+.br
+Set it to 2 to force the modifier to be the second parameter if it would
+otherwise be the first.
+.br
 Set it to 3 to mark the sequence with a '>' to hint that it is private.
+.TP 8
+.B "modifyFunctionKeys (\fPclass\fB ModifyFunctionKeys\fP)"
+Tells how to handle the special case where
+Control-, Shift-, Alt- or Meta-modifiers are used to add a parameter to
+the escape sequence returned by a (numbered) function-key.
 The default is ``2''.
+The resource values are similar to \fBmodifyCursorKeys\fP:
+.IP
+Set it to -1 to permit the user to user shift- and control-modifiers
+to construct function-key strings using the normal encoding scheme.
+.br
+Set it to 0 to use the old/obsolete behavior.
+.br
+Set it to 1 to prefix modified sequences with CSI.
+.br
+Set it to 2 to force the modifier to be the second parameter if it would
+otherwise be the first.
+.br
+Set it to 3 to mark the sequence with a '>' to hint that it is private.
+.IP
+If \fBmodifyFunctionKeys\fP is zero,
+\fIxterm\fP uses Control- and Shift-modifiers to allow the user to
+construct numbered function-keys beyond the set provided by the
+keyboard:
+.RS
+.TP 5
+Control
+adds the value given by the \fBctrlFKeys\fP resource.
+.TP 5
+Shift
+adds twice the value given by the \fBctrlFKeys\fP resource.
+.TP 5
+Control/Shift
+adds three times the value given by the \fBctrlFKeys\fP resource.
+.RE
+.IP
+As a special case,
+legacy (when \fBoldFunctionKeys\fP is true)
+or vt220 (when \fBsunKeyboard\fP is true) keyboards interpret only the
+Control-modifier when constructing numbered function-keys.
+This is done to provide compatible keyboards for DEC VT220 and related
+terminals that implement user-defined keys (UDK).
+.TP 8
+.B "modifyOtherKeys (\fPclass\fB ModifyOtherKeys\fP)"
+Like \fBmodifyCursorKeys\fP, tells \fIxterm\fP to construct an
+escape sequence for other keys (such as "2") when modified by
+Control-, Alt- or Meta-modifiers.
+This feature does not apply to function keys and well-defined
+keys such as ESC or the control keys.
+The default is ``0'':
+.RS
+.TP 5
+0
+disables this feature.
+.TP 5
+1
+enables this feature for keys except for those with
+well-known behavior, e.g., Tab, Backarrow and some special
+control character cases, e.g., Control-Space to make a NUL.
+.TP 5
+2
+enables this feature for keys including the exceptions listed.
+.RE
 .TP 8
 .B "multiClickTime (\fPclass\fB MultiClickTime)"
 Specifies the maximum time in milliseconds between multi-click select
@@ -2383,6 +2508,29 @@ escape sequences for turning UTF-8 mode on/off are allowed.
 .TP 8
 .B "utf8Fonts (\fPclass\fB Utf8Fonts)"
 See the discussion of the \fBlocale\fP resource.
+.TP 8
+.B "utf8Latin1 (\fPclass\fB Utf8Latin1)"
+If true,
+allow an ISO-8859-1 \fInormal\fP
+font to be combined with an ISO-10646 font if the latter is given
+via the \fB-fw\fP option or its corresponding resource value.
+The default is ``false.''
+.TP 8
+.B "utf8Title (\fPclass\fB Utf8Title)"
+Applications can set \fIxterm\fP's title by writing a control sequence.
+Normally this control sequence follows the VT220 convention,
+which encodes the string in ISO-8859-1 and
+allows for an 8-bit string terminator.
+If \fIxterm\fP is started in a UTF-8 locale,
+it translates the ISO-8859-1 string to UTF-8 to work with the X libraries
+which assume the string is UTF-8.
+.IP
+However, some users may wish to write a title string encoded in UTF-8.
+Set this resource to ``true'' to allow UTF-8 encoded title strings.
+That cancels the translation to UTF-8,
+allowing UTF-8 strings to be displayed as is.
+.IP
+The default is ``false.''
 .TP 8
 .B "veryBoldColors (\fPclass\fB VeryBoldColors)"
 Specifies whether to combine video attributes with colors specified by
@@ -3109,7 +3257,7 @@ resource.
 .
 .TP
 Scroll to Bottom on Tty Output (scrollttyoutput)
-Enable (or disable) scrolling to the bottom of the scrolling region on output to the terminal..
+Enable (or disable) scrolling to the bottom of the scrolling region on output to the terminal.
 This corresponds to the
 .B -si
 option and the
@@ -3324,6 +3472,7 @@ The second section allows you to modify the way it is displayed:
 Line-Drawing Characters (font-linedrawing)
 When set, tells \fIxterm\fP to draw its own line-drawing characters.
 Otherwise it relies on the font containing these.
+Compare to the \fBforceBoxChars\fP resource.
 .TP
 Doublesized Characters (font-doublesize)
 When set, \fIxterm\fP may ask the font server to produce scaled versions
@@ -4235,7 +4384,10 @@ If your display supports color, use this
 *customization: -color
 .in -10
 in your .Xdefaults file to
-automatically turn on color in \fIxterm\fP and similar applications.
+automatically use this resource file rather than
+.IR __apploaddir__/XTerm .
+If you do not do this,
+\fIxterm\fP uses its compiled-in default resource settings for colors.
 .
 .
 .SH ERROR MESSAGES

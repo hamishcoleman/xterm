@@ -1,6 +1,6 @@
-dnl $XTermId: aclocal.m4,v 1.221 2006/03/13 01:27:57 tom Exp $
+dnl $XTermId: aclocal.m4,v 1.232 2006/08/03 19:24:02 tom Exp $
 dnl
-dnl $XFree86: xc/programs/xterm/aclocal.m4,v 3.63 2006/03/13 01:27:57 dickey Exp $
+dnl $XFree86: xc/programs/xterm/aclocal.m4,v 3.65 2006/06/19 00:36:50 dickey Exp $
 dnl
 dnl ---------------------------------------------------------------------------
 dnl
@@ -1199,6 +1199,57 @@ fi
 
 ])dnl
 dnl ---------------------------------------------------------------------------
+dnl CF_POSIX_SAVED_IDS version: 6 updated: 2006/08/02 20:37:21
+dnl ------------------
+dnl
+dnl Check first if saved-ids are always supported.  Some systems
+dnl may require runtime checks.
+AC_DEFUN([CF_POSIX_SAVED_IDS],
+[
+AC_CHECK_HEADERS( \
+sys/param.h \
+)
+
+AC_CACHE_CHECK(if POSIX saved-ids are supported,cf_cv_posix_saved_ids,[
+AC_TRY_LINK(
+[
+#include <unistd.h>
+#ifdef HAVE_SYS_PARAM_H
+#include <sys/param.h>		/* this may define "BSD" */
+#endif
+],[
+#if defined(_POSIX_SAVED_IDS) && (_POSIX_SAVED_IDS > 0)
+	void *p = (void *) seteuid;
+	int x = seteuid(geteuid());
+#elif defined(BSD) && (BSD >= 199103)
+/* The BSD's may implement the runtime check - and it fails.
+ * However, saved-ids work almost like POSIX (close enough for most uses).
+ */
+#else
+make an error
+#endif
+],[cf_cv_posix_saved_ids=yes
+],[
+AC_TRY_RUN([
+#ifdef HAVE_STDLIB_H
+#include <stdlib.h>
+#endif
+#include <unistd.h>
+int main()
+{
+	void *p = (void *) seteuid;
+	long code = sysconf(_SC_SAVED_IDS);
+	exit ((code > 0) ? 0 : 1);
+}],
+	cf_cv_posix_saved_ids=yes,
+	cf_cv_posix_saved_ids=no,
+	cf_cv_posix_saved_ids=unknown)
+])
+])
+
+test "$cf_cv_posix_saved_ids" = yes && AC_DEFINE(HAVE_POSIX_SAVED_IDS)
+])
+dnl ---------------------------------------------------------------------------
 dnl CF_POSIX_WAIT version: 2 updated: 2000/05/29 16:16:04
 dnl -------------
 dnl Check for POSIX wait support
@@ -1326,6 +1377,65 @@ $1=`echo "$2" | \
 		-e 's/-[[UD]]$3\(=[[^ 	]]*\)\?[$]//g'`
 ])dnl
 dnl ---------------------------------------------------------------------------
+dnl CF_SIGWINCH version: 1 updated: 2006/04/02 16:41:09
+dnl -----------
+dnl Use this macro after CF_XOPEN_SOURCE, but do not require it (not all
+dnl programs need this test).
+dnl
+dnl This is really a MacOS X 10.4.3 workaround.  Defining _POSIX_C_SOURCE
+dnl forces SIGWINCH to be undefined (breaks xterm, ncurses).  Oddly, the struct
+dnl winsize declaration is left alone - we may revisit this if Apple choose to
+dnl break that part of the interface as well.
+AC_DEFUN([CF_SIGWINCH],
+[
+AC_CACHE_CHECK(if SIGWINCH is defined,cf_cv_define_sigwinch,[
+	AC_TRY_COMPILE([
+#include <sys/types.h>
+#include <sys/signal.h>
+],[int x = SIGWINCH],
+	[cf_cv_define_sigwinch=yes],
+	[AC_TRY_COMPILE([
+#undef _XOPEN_SOURCE
+#undef _POSIX_SOURCE
+#undef _POSIX_C_SOURCE
+#include <sys/types.h>
+#include <sys/signal.h>
+],[int x = SIGWINCH],
+	[cf_cv_define_sigwinch=maybe],
+	[cf_cv_define_sigwinch=no])
+])
+])
+
+if test "$cf_cv_define_sigwinch" = maybe ; then
+AC_CACHE_CHECK(for actual SIGWINCH definition,cf_cv_fixup_sigwinch,[
+cf_cv_fixup_sigwinch=unknown
+cf_sigwinch=32
+while test $cf_sigwinch != 1
+do
+	AC_TRY_COMPILE([
+#undef _XOPEN_SOURCE
+#undef _POSIX_SOURCE
+#undef _POSIX_C_SOURCE
+#include <sys/types.h>
+#include <sys/signal.h>
+],[
+#if SIGWINCH != $cf_sigwinch
+make an error
+#endif
+int x = SIGWINCH],
+	[cf_cv_fixup_sigwinch=$cf_sigwinch
+	 break])
+
+cf_sigwinch=`expr $cf_sigwinch - 1`
+done
+])
+
+	if test "$cf_cv_fixup_sigwinch" != unknown ; then
+		CPPFLAGS="$CPPFLAGS -DSIGWINCH=$cf_cv_fixup_sigwinch"
+	fi
+fi
+])dnl
+dnl ---------------------------------------------------------------------------
 dnl CF_SIG_ATOMIC_T version: 2 updated: 2005/09/18 17:27:12
 dnl ---------------
 dnl signal handler, but there are some gcc depedencies in that recommendation.
@@ -1437,7 +1547,7 @@ static struct termio d_tio;
 test "$cf_cv_svr4" = yes && AC_DEFINE(SVR4)
 ])dnl
 dnl ---------------------------------------------------------------------------
-dnl CF_SYSV version: 10 updated: 2005/09/18 15:42:35
+dnl CF_SYSV version: 12 updated: 2006/06/21 16:52:31
 dnl -------
 dnl Check if this is a SYSV platform, e.g., as used in <X11/Xos.h>, and whether
 dnl defining it will be helpful.  The following features are used to check:
@@ -1453,6 +1563,7 @@ dnl c) compile with type definitions that differ on SYSV hosts from standard C.
 AC_DEFUN([CF_SYSV],
 [
 AC_CHECK_HEADERS( \
+termios.h \
 stdlib.h \
 X11/Intrinsic.h \
 )
@@ -1469,12 +1580,18 @@ AC_TRY_COMPILE([
 #ifdef HAVE_X11_INTRINSIC_H
 #include <X11/Intrinsic.h>	/* Intrinsic.h has other traps... */
 #endif
+#ifdef HAVE_TERMIOS_H		/* needed for HPUX 10.20 */ 
+#include <termios.h> 
+#define STRUCT_TERMIOS struct termios 
+#else 
+#define STRUCT_TERMIOS struct termio 
+#endif 
 #include <curses.h>
 #include <term.h>		/* eliminate most BSD hacks */
 #include <errno.h>		/* declare sys_errlist on older systems */
 #include <sys/termio.h>		/* eliminate most of the remaining ones */
 ],[
-static struct termio d_tio;
+static STRUCT_TERMIOS d_tio;
 	d_tio.c_cc[VINTR] = 0;
 	d_tio.c_cc[VQUIT] = 0;
 	d_tio.c_cc[VERASE] = 0;
@@ -2051,7 +2168,7 @@ else
 fi
 ])dnl
 dnl ---------------------------------------------------------------------------
-dnl CF_WITH_PATH version: 6 updated: 1998/10/11 00:40:17
+dnl CF_WITH_PATH version: 7 updated: 2006/08/03 15:20:08
 dnl ------------
 dnl Wrapper for AC_ARG_WITH to ensure that user supplies a pathname, not just
 dnl defaulting to yes/no.
@@ -2066,7 +2183,7 @@ AC_DEFUN([CF_WITH_PATH],
 [AC_ARG_WITH($1,[$2 ](default: ifelse($4,,empty,$4)),,
 ifelse($4,,[withval="${$3}"],[withval="${$3-ifelse($5,,$4,$5)}"]))dnl
 CF_PATH_SYNTAX(withval)
-eval $3="$withval"
+$3="$withval"
 AC_SUBST($3)dnl
 ])dnl
 dnl ---------------------------------------------------------------------------
@@ -2119,10 +2236,11 @@ int x = XkbBI_Info
 test "$cf_cv_xkb_bell_ext" = yes && AC_DEFINE(HAVE_XKB_BELL_EXT)
 ])
 dnl ---------------------------------------------------------------------------
-dnl CF_XOPEN_SOURCE version: 23 updated: 2005/10/15 16:39:05
+dnl CF_XOPEN_SOURCE version: 24 updated: 2006/04/02 16:41:09
 dnl ---------------
 dnl Try to get _XOPEN_SOURCE defined properly that we can use POSIX functions,
-dnl or adapt to the vendor's definitions to get equivalent functionality.
+dnl or adapt to the vendor's definitions to get equivalent functionality,
+dnl without losing the common non-POSIX features.
 dnl
 dnl Parameters:
 dnl	$1 is the nominal value for _XOPEN_SOURCE

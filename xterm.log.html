@@ -20,8 +20,8 @@
  * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF   *
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.            *
  *****************************************************************************
-  $XTermId: xterm.log.html,v 1.395 2006/03/13 01:27:59 tom Exp $
-  $XFree86: xc/programs/xterm/xterm.log.html,v 1.146 2006/03/13 01:27:59 dickey Exp $
+  $XTermId: xterm.log.html,v 1.481 2006/10/17 22:15:24 tom Exp $
+  $XFree86: xc/programs/xterm/xterm.log.html,v 1.151 2006/06/20 00:42:38 dickey Exp $
   -->
 <HTML>
 <HEAD>
@@ -46,6 +46,18 @@ Most of these are summarized in the XFree86 CHANGELOG
 is the latest version of this file.
 
 <UL>
+<LI><A HREF="#xterm_222">Patch #222 - 2006/10/17</A>
+<LI><A HREF="#xterm_221">Patch #221 - 2006/10/1</A>
+<LI><A HREF="#xterm_220">Patch #220 - 2006/9/10</A>
+<LI><A HREF="#xterm_219">Patch #219 - 2006/9/4</A>
+<LI><A HREF="#xterm_218">Patch #218 - 2006/8/27</A>
+<LI><A HREF="#xterm_217">Patch #217 - 2006/8/20</A>
+<LI><A HREF="#xterm_216">Patch #216 - 2006/8/3</A>
+<LI><A HREF="#xterm_215">Patch #215 - 2006/6/19 - XFree86 4.6.99.2</A>
+<LI><A HREF="#xterm_214">Patch #214 - 2006/6/18 - XFree86 4.6.99.2</A>
+<LI><A HREF="#xterm_213">Patch #213 - 2006/4/30 - XFree86 4.5.99.905</A>
+<LI><A HREF="#xterm_212">Patch #212 - 2006/4/9 - XFree86 4.5.99.904</A>
+<LI><A HREF="#xterm_211">Patch #211 - 2006/3/19 - XFree86 4.5.99.902</A>
 <LI><A HREF="#xterm_210">Patch #210 - 2006/3/12 - XFree86 4.5.99.902</A>
 <LI><A HREF="#xterm_209">Patch #209 - 2006/2/12 - XFree86 4.5.99.22</A>
 <LI><A HREF="#xterm_208">Patch #208 - 2006/1/3 - XFree86 4.5.99.19</A>
@@ -115,7 +127,7 @@ is the latest version of this file.
 <LI><A HREF="#xterm_144">Patch #144 - 2000/8/23 - XFree86 4.0.1b</A>
 <LI><A HREF="#xterm_143">Patch #143 - 2000/8/19 - XFree86 4.0.1b</A>
 <LI><A HREF="#xterm_142">Patch #142 - 2000/8/18 - XFree86 4.0.1b</A>
-<LI><A HREF="#xterm_141">Patch #141 - 2000/7/14 - XFree86 4.0.1b</A>
+<LI><A HREF="#xterm_141">Patch #141 - 2000/8/14 - XFree86 4.0.1b</A>
 <LI><A HREF="#xterm_140">Patch #140 - 2000/7/23 - XFree86 4.0.1</A>
 <LI><A HREF="#xterm_139">Patch #139 - 2000/6/17 - XFree86 4.0d</A>
 <LI><A HREF="#xterm_138">Patch #138 - 2000/6/15 - XFree86 4.0c</A>
@@ -259,6 +271,341 @@ is the latest version of this file.
 <LI><A HREF="#xterm_01">Patch #1 - 1996/1/6</A>
 </UL>
 
+<H1><A NAME="xterm_222">Patch #222 - 2006/10/17</A></H1>
+<ul>
+	<li>minor optimization for recoloring cursor via dynamic colors.
+
+	<li>fix a bug caused by restructuring of tek4014 widget (report by Paul
+	    Schenkeveld)
+</ul>
+
+<H1><A NAME="xterm_221">Patch #221 - 2006/10/1</A></H1>
+<ul>
+	<li>fix for regular expressions:  the code which converted the column
+	    offset within a line did not check properly for the end of a line,
+	    and if allowed to match the whole line, would select the beginning
+	    of the following line.  If the following line were empty, in turn
+	    it would select from the next, etc.  (report by Sean
+	    Reifschneider).
+
+	<li>minor optimization of color allocation to avoid repainting the
+	    screen if the corresponding color had not been allocated.
+
+	<li>fixes for vttests/256colors.pl (report by Egmont Koblinger).
+
+	<li>add terminfo building block entries for modifiers of the 6-key
+	    editing keypad.
+
+	<li>fix for initialization of tek4014 which broke on QNX 6.1
+</ul>
+
+<H1><A NAME="xterm_220">Patch #220 - 2006/9/10</A></H1>
+<ul>
+	<li>make "xterm -t -iconic" work as expected, i.e., start in tek4014
+	    mode, but iconified.
+</ul>
+
+<H1><A NAME="xterm_219">Patch #219 - 2006/9/4</A></H1>
+<ul>
+	<li>some internal restructuring to separate data for vt100 and tek4014
+	    widgets.
+
+	<li>fix a few cases where form-events would be seen by the vt100
+	    widget when built with the toolbar configuration.
+</ul>
+
+<H1><A NAME="xterm_218">Patch #218 - 2006/8/27</A></H1>
+<ul>
+	<li>change behavior when encountering an illegal character in a title
+	    string.  Rather than reject the string, translate illegal
+	    characters into "?" and use the string (requested by Thomas Wolff).
+
+	<li>improve checks for nonprinting characters in title strings
+	    (report by Samuel Thibault).
+
+	<li>correct typo in menu labels, changing <code>print-redirect</code>
+	    to <code>print-redir</code>, making it follow the manpage and
+	    match the usage for the actions table (report by Samuel Thibault).
+
+	<li>correct a typo that prevents building with some older systems such
+	    as Solaris 2.6 (report by Julian Bridle).
+</ul>
+
+<H1><A NAME="xterm_217">Patch #217 - 2006/8/20</A></H1>
+<ul>
+	<li>minor improvements to FreeType font layout and drawing.
+
+	<li>add a check in the ptyInitialErase logic to ensure that the
+	    termcap was read (Redhat Bugzilla #201246).
+
+	<li>limit changes for reverse-video from
+	    <a href="#xterm_216">patch #216</a> to cases where the
+	    reverse-video command-line option is used
+	    (report by Zdenek Sekera).
+
+	<li>correct bitmap-derived pointsizes for TrueType fonts; they should
+	    be proportional to the square root of the area of the bitmap
+	    fonts.
+
+	<li>add resources to specify pointsize of TrueType fonts (request
+	    by Reuben Thomas).
+
+	<li>improve install of terminfo by filtering out harmless messages
+	    related to extended capabilities.  At the same time, use ncurses
+	    tic to compile the extended capabilities if possible
+	    (report by Zdenek Sekera).
+
+	<li>update "xterm+pcfkeys" terminfo entry to correspond to
+	    <a href="#xterm_216">patch #216</a>.
+</ul>
+
+<H1><A NAME="xterm_216">Patch #216 - 2006/8/3</A></H1>
+<ul>
+	<li>improve handling of <code>ConfigureNotify</code> events by checking
+	    if there are further events in the queue which obsolete the current
+	    one (adapted from rxvt 2.7.5).  Only the normal normal
+	    (non-toolbar) configuration is addressed in this patch.
+
+	<li>several changes to terminfo:
+	<ul>
+	    <li>incorporate some minor changes from ncurses to help keep these
+	        synchronized:
+	    <dl>
+		<dt>2005-02-26
+		<dd>modify sgr/sgr0 in xterm-new to improve tgetent's derived "me".
+		<dt>2006-02-18
+		<dd>remove ncv flag from xterm-16color
+		<dt>2006-06-24
+		<dd>improve xterm-256color by combining the 16-color
+		setaf/setab strings with SGR 48,
+		and cancelling the setf/setb strings.
+	    </dl>
+	    <li>use extended function-key definitions for xterm-sun, xterm-sco
+	        entries.
+
+	    <li>add terminfo building-blocks corresponding to the
+	        <code>modifyFunctionKeys</code>
+	        and <code>modifyCursorKeys</code> resources.
+	</ul>
+
+	<li>ifdef'd Sun function-key feature to make it optional, like HP and
+	    SCO.
+
+	<li>extend table for termcap-query feature through F63, and updated
+	    tcapquery.pl to match.
+
+	<li>modify logic for function-key input processing to allow function
+	    key numbers which are constructed by control- and shift-modifiers
+	    to extend beyond X's hardcoded limit of 35.
+
+	<li>add control sequence to set or reset the <code>eightBitInput</code>
+	    resource.
+
+	<li>change default resource <code>modifyFunctionKeys</code> to 2
+	    to avoid sending SS3 with parameters (report by Kalle Olavi Niemitalo).
+
+	<li>add control sequences for setting and resetting the values of the
+	    <code>modifyCursorKeys</code>,
+	    <code>modifyFunctionKeys</code> and
+	    <code>modifyOtherKeys</code> resources.
+
+	<li>add <code>modifyFunctionKeys</code> resource like
+	    <code>modifyCursorKeys</code>.
+	    Setting this to zero allows one to use the control- and
+	    shift-modifiers to construct function key strings,
+	    for terminals using many function keys,
+	    e.g., for <code>xterm-sun</code> or <code>xterm-sco</code>.
+
+	<li>modify screen responses and function-key logic to reduce the
+	    number of writes made, to make it less likely that an application
+	    would read only part of a function-key in a read operation
+	    (suggested by John E Urbanczyk).
+
+	<li>add <code>combiningChars</code> resource, which allows the user to
+	    specify the maximum number of combining characters that xterm will
+	    store for each cell in wide-character mode (prompted by request by
+	    Markus Kuhn to increase the limit from 2).
+
+	<li>improve logic in <code>metaSendsEscape</code> in case the Alt-
+	    and Meta-keys are mapped to different modifiers.  That allows one
+	    to use the Alt-key for shifting in the <code>eightBitInput</code>
+	    and use a Meta-key modifier to prefix the result with an
+	    <code>&lt;ESC&gt;</code>.
+
+	<li>improve <code>modifyCursorKeys</code> logic to prevent it from
+	    modifying codes where <code>eightBitInput</code> or
+	    <code>metaSendsEscape</code> are set
+	    (request by Dan Nicolaescu).
+
+	<li>improve <code>modifyCursorKeys</code> logic to prevent it from
+	    changing the user input when other modifiers such as AltGr are used
+	    (report by Thomas Wolff).
+
+	<li>extend <code>modifyCursorKeys</code> to include the numeric keypad
+	    when in application mode.
+
+	<li>improve <code>-reverse</code> (<code>-rv</code>) option
+	    (patch by Jason Vas Dias, Redhat #189161).
+
+	<li>workaround for color resources on Fedora-5 which made the toolbar
+	    colors inconsistent.
+
+	<li>corrected calls used for <code>--disable-setuid</code> option,
+	    add debugging traces to help diagnose this area.
+
+	<li>modify configure script to ensure that <code>USE_UTMP_SETGID</code>
+	    is defined only if the check for POSIX saved-ids succeeds, or
+	    corresponds to one of the BSD systems known to have a workable
+	    <code>setegid</code> function.
+
+	<li>extend configure check for POSIX saved-ids to include BSD systems
+
+	<li>modify CF_SYSV configure macro to work with gcc on HPUX 10.20,
+	    whose broken
+	    <code>&lt;term.h&gt;</code> relies on including
+	    <code>&lt;termios.h&gt;</code>.
+
+	<li>change order of setuid/setgid ifdef checks in Imakefile to make
+	    it simpler to produce a setgid install, allowing the latter to
+	    override the former (prompted by an XFree86 commit).
+
+	<li>adapt a fix for setgid support from subsequent XFree86 changes
+	    (patch by Emanuele Giaquinta).
+
+	<li>further improve setgid support (patches by Emanuele Giaquinta).
+</ul>
+
+<H1><A NAME="xterm_215">Patch #215 - 2006/6/19 - XFree86 4.6.99.2</A></H1>
+<ul>
+	<li>improve setgid support by exploiting the saved-ids feature on which
+	    it relies (patch by Emanuele Giaquinta).
+
+	<li>make the <code>modifyOtherKeys</code> resource disabled by default
+	    since the intermediate setting altered some common bindings
+	    (report by Emanuele Giaquinta).
+</ul>
+
+<H1><A NAME="xterm_214">Patch #214 - 2006/6/18 - XFree86 4.6.99.2</A></H1>
+<ul>
+	<li>modify makefile rule for ctlseqs.txt to strip backspace/overstrikes,
+	    and add a copy of ctlseqs.txt to the source tarballs (requests by
+	    Bram Moolenaar, Emanuele Giaquinta).
+
+	<li>add <code>modifyOtherKeys</code> resource, analogous to the
+	    <code>modifyCursorKeys</code> resource.  This applies to keys that
+	    normally would transmit nothing when a given modifier is applied
+	    (request by Dan Nicolaescu).
+
+	<li>add <code>default</code> to the acceptable values for the
+	    <code>keyboardType</code> resource, allowing the <code>-kt</code>
+	    command-line option to override app-defaults resource settings of
+	    <code>sunKeyboard</code>, etc.
+
+	<li>correct ifdef's for <code>XkbBell()</code> which used the header
+	    file but not the corresponding function in
+	    <a href="#xterm_175">patch #175</a>
+	    (report by Zach Beane).
+
+	<li>add xterm manpage to the <code>--with-symlink</code> logic.
+
+	<li>regenerated configure script to omit some debugging artifacts of
+	    the SIGWINCH test.
+
+	<li>fix <code>install-man</code> rule in <code>Makefile.in</code> to
+	    avoid including the <code>$(DESTDIR)</code> value in substitutions
+	    made on the manpages (patch by Emanuele Giaquinta).
+
+	<li>improved fix for cursor deallocation
+	    (Redhat #186935, patch by Jason Vas Dias).
+
+	<li>improve checks for setuid/setgid operation to accommodate limited
+	    resource management in some kernels (GenToo #193238).
+
+	<li>update config.guess, config.sub
+</ul>
+
+<H1><A NAME="xterm_213">Patch #213 - 2006/4/30 - XFree86 4.5.99.905</A></H1>
+<ul>
+	<li>minor optimization to cell layout; will use that to simplify some
+	    logic and allow for more than two combining characters in another
+	    patch.
+
+	<li>add <code>utf8Latin1</code> resource to make optional the
+	    feature from <a href="#xterm_209">patch #209</a> which
+	    allowed ISO-8859-1 fonts to be used in cases
+	    where a wide font was given.  This would only
+	    work for the special case where the user normally used Latin-1
+	    and wanted some wide characters (report by Rostislav Krasny).
+
+	<li>add <code>utf8Title</code> resource to manpage (Novell #52655).
+
+	<li>fix typo in table entry for <code>utf8Title</code> resource which
+	    made it treated as an integer rather than boolean (patch by Mike
+	    Fabian, Novell #52655).
+</ul>
+
+<H1><A NAME="xterm_212">Patch #212 - 2006/4/9 - XFree86 4.5.99.904</A></H1>
+<ul>
+	<li>improve description of <code>forceBoxChars</code> in manpage
+	    (discussion with Joe Wells).
+
+	<li>set checkmark for "Select To Clipboard" menu entry on startup,
+	    from resource setting.
+
+	<li>update manpage to note that <code>*customization:color</code> is
+	    not needed, though it is useful (Redhat #188034).
+
+	<li>add underscore to sample pattern for URL in <code>XTerm.ad</code>
+	    (Redhat #188037).
+
+	<li>modify install rule for manpage to use the configured app-defaults
+	    directory (Redhat #188031).
+
+	<li>add checks in <code>releaseCursorGCs()</code> to ensure GC's are
+	    distinct, needed since memory leak changes for
+	    <a href="#xterm_208">patch #208</a>
+	    (Redhat #186935, patch by Jason Vas Dias).
+
+	<li>modify <code>Imakefile</code> definitions to allow
+	    <code>imake</code> to set <code>InstallXtermSetGID</code>.
+	    Add symbol <code>InstGidFlags</code>.
+
+	<li>add configure script check to ensure that SIGWINCH if defined even
+	    when headers undefine this as a side-effect of
+	    <code>_POSIX_C_SOURCE</code>, etc.
+
+	<li>resync with XFree86 CVS:
+	<ul>
+	   <li>ifdef-out chmod of terminal device for OS/2 (XFree86 #1663,
+	       Frank Giessler).
+	   <li>move new <code>Imakefile</code> chunk which defines
+	       <code>$(CSGIDFLAGS)</code> before DEFINES,
+	       e.g., for IRIX64 (Marc La France).
+	</ul>
+</ul>
+
+<H1><A NAME="xterm_211">Patch #211 - 2006/3/19 - XFree86 4.5.99.902</A></H1>
+<ul>
+	<li>modify prefix/suffix transformation in makefile to make
+	    <code>uxterm</code> install properly on Cygwin.
+
+	<li>restore the sizeof-comparison for <code>struct lastlog</code>
+	    added in <a href="#xterm_208">patch #208</a>,
+	    rendered (mostly) obsolete in <a href="#xterm_210">patch #210</a>,
+	    since an imake configuration can still turn that code on
+	    (prompted by comment by David Dawes).
+
+	<li>remove feature for <code>FreeBSDArchitecture</code> from
+	    <code>Imakefile</code> which would install xterm using the
+	    <code>utmp</code> group since a standard FreeBSD system has no such
+	    group, though it would support this configuration.  FreeBSD
+	    packager uses the <code>configure</code> script, which can make the
+	    appropriate check (prompted by comment by David Dawes).
+
+	<li>fixes for gcc redefinition warnings when built using imake
+	    (reports by David Dawes, Marc La France).
+</ul>
+
 <H1><A NAME="xterm_210">Patch #210 - 2006/3/12 - XFree86 4.5.99.902</A></H1>
 <ul>
 	<li>add configure check for workaround in
@@ -274,7 +621,7 @@ is the latest version of this file.
 	<li>add vttests/paste64.pl script to test experimental option for
 	    setting/getting selection data.
 
-	<li>add some error-checking in fontutils.c 
+	<li>add some error-checking in fontutils.c
 	    (prompted by David Dawes commit message for XFree86).
 
 	<li>change xterm manpage to show the actual color resource names
@@ -313,10 +660,10 @@ is the latest version of this file.
 	    by precalculating the height of the toolbar.
 
 	<li>remove menu entry for "Enable Curses Emulation" (to make room for
-	    "Select To Clipboard).
+	    "Select To Clipboard").
 
 	<li>add resource <code>selectToClipboard</code>,
-	    action <code>set-select</code> and a menu entry to allow 
+	    action <code>set-select</code> and a menu entry to allow
 	    users to switch between PRIMARY and CLIPBOARD for select/paste.
 
 	<li>allow cursor to have the same color as foreground (text), since it
@@ -326,7 +673,7 @@ is the latest version of this file.
 	    href="#xterm_204">patch #204</a> to allow an ISO-8859-1 "normal"
 	    font to be combined with an ISO-10646 font if the latter is given
 	    via the <code>-fw</code> option or its corresponding resource
-	    value.
+	    value (prompted by comment in Novell #49305).
 
 	<li>add <code>TIOCSCTTY</code> <code>ioctl()</code> ifdef'd for
 	    <code>__GNU__</code> to set the controlling terminal (Debian
@@ -534,7 +881,7 @@ is the latest version of this file.
 	<li>modify parsing of control sequence <code>CSI&nbsp;T</code>
 	    to allow scroll-down
 	    to be sent while mouse tracking is enabled (request by
-	    D Hugh Redelmeier). 
+	    D Hugh Redelmeier).
 
 	<li>correct termcap "me" (mode-end) string so it does not modify the
 	    alternate character set (report by Andrey Chernov).
@@ -2339,7 +2686,7 @@ is the latest version of this file.
 	  </ul>
 </ul>
 
-<H1><A NAME="xterm_164">Patch #163 - 2001/11/13 - XFree86 4.1.0</A></H1>
+<H1><A NAME="xterm_164">Patch #164 - 2001/11/13 - XFree86 4.1.0</A></H1>
 <ul>
 	<li>correct a case where <code>ptyInitialErase</code> and
 	  <code>backarrowKeyIsErase</code> resources combine to set
@@ -3430,7 +3777,7 @@ is the latest version of this file.
 	<li>modify logic for <code>deleteIsDEL</code> resource so it has
 	  internally 3 states:  unspecified, true and false.  If unspecified,
 	  the keyboard type determines whether the Delete key transmits
-	  <code>&lt;esc&gt;[3~</code> or <code>\177</code>, and the popup menu
+	  <code>&lt;ESC&gt;[3~</code> or <code>\177</code>, and the popup menu
 	  entry reflects the internal state.  Otherwise, the popup menu entry
 	  overrides the keyboard type (suggested by Dr Werner Fink, to make it
 	  simpler to set resources that imitate the legacy X11R6 xterm).
@@ -3493,8 +3840,8 @@ is the latest version of this file.
 	  Remove escape sequence.
 
 	<li>remove logic for metaSendsEscape that would allow xterm to send
-	  <code>&lt;esc&gt;[3~</code> before a function key that would begin
-	  with <code>&lt;esc&gt;[3~</code> (request by Christian Weisgerber).
+	  <code>&lt;ESC&gt;[3~</code> before a function key that would begin
+	  with <code>&lt;ESC&gt;[3~</code> (request by Christian Weisgerber).
 
 	<li>add missing action and documentation for meta-sends-escape.
 
@@ -3692,7 +4039,7 @@ is the latest version of this file.
 	  not necessarily correspond with X's notion of those keys.
 
 	<li>modify treatment of XK_Delete keysym so it transmits parameterized
-	  VT220-style <code>&lt;esc&gt;[3~</code> if modifiers (shift, control
+	  VT220-style <code>&lt;ESC&gt;[3~</code> if modifiers (shift, control
 	  alt) are given (request by Alexander V Lukyanov).
 
 	<li>corrected misspelled resource name in command-line option for
@@ -4522,7 +4869,7 @@ the Imakefile defines this).
 
 	<li>change default (with sunKeyboard resource false) behavior of
 	  the editing keypad "Delete" to send a 127, like xterm-r6.
-	  The VT220-style <code>&lt;esc&gt;[3~</code> is sent when
+	  The VT220-style <code>&lt;ESC&gt;[3~</code> is sent when
 	  sunKeyboard is true (reported by Tomas Vanhala).
 
 	<li>add parameters to function keys to indicate if shift, control
@@ -4558,7 +4905,7 @@ the Imakefile defines this).
 	<li>minor tweak to OSC responses, to use BEL if the application used
 	  that to end the request, rather than ST.  This works better with
 	  shell scripts, which may not handle an
-	  <code>&lt;esc&gt;backslash</code> very well.
+	  <code>&lt;ESC&gt;backslash</code> very well.
 
 	<li>separate menu settings for reverse video from that done under
 	  program control.

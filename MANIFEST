@@ -1,4 +1,4 @@
-MANIFEST for xterm, version xterm-210
+MANIFEST for xterm-222, version xterm-222
 --------------------------------------------------------------------------------
 MANIFEST                        this file
 256colres.h                     resource-definitions for 256-color mode
@@ -35,6 +35,7 @@ configure                       generated
 configure.in                    template for generating configure script
 configure                       Configuration script for UNIX
 ctlseqs.ms                      documentation: Xterm Control Sequences
+ctlseqs.txt                     generated rendition of ctlseqs.ms
 cursor.c                        VT100 low-level cursor movement
 data.c                          global data declarations
 data.h                          global data external-definitions
@@ -66,6 +67,7 @@ ptydata.c                       functions to manipulate data read from pty
 ptyx.h                          structure-definitions for 'xterm'
 resize.c                        program to compute/modify xterm's window size
 resize.man                      manual page for 'resize'
+run-tic.sh                      run tic, filtering out harmless messages
 screen.c                        VT100 screen update functions
 scrollbar.c                     VT100 scrollbar support functions
 sinstall.sh                     install setuid if existing program was
@@ -119,8 +121,9 @@ vttests/8colors.sh              test-script to illustrate 8-colors
 vttests/acolors.sh              demonstrate changing the ANSI colors
 vttests/doublechars.sh          test script to demonstrate doublesize chars
 vttests/dynamic.sh              script to illustrate the dynamic colors control sequence
+vttests/dynamic2.sh             complete example of dynamic colors
 vttests/fonts.sh                script to demonstrate font-switching sequences
-vttests/past64.pl               script to test base64-selection option
+vttests/paste64.pl              script to test base64-selection option
 vttests/resize.pl               translated resize.sh to perl since it is easy to test, and I needed
 vttests/resize.sh               script to demonstrate resizing
 vttests/tcapquery.pl            script to test tcap-query option

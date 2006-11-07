@@ -1,4 +1,4 @@
-/* $XTermId: data.h,v 1.94 2006/02/13 01:14:58 tom Exp $ */
+/* $XTermId: data.h,v 1.96 2006/09/01 21:53:26 tom Exp $ */
 
 /* $XFree86: xc/programs/xterm/data.h,v 3.39 2006/02/13 01:14:58 dickey Exp $ */
 
@@ -80,7 +80,7 @@ extern struct q_head read_queue;
 #if OPT_TEK4014
 extern Char *Tpushb;
 extern Char *Tpushback;
-extern TekLink *TekRefresh;
+extern TekLink *tekRefreshList;
 extern TekWidget tekWidget;
 extern Widget tekshellwidget;
 extern int T_lastx;
@@ -160,7 +160,6 @@ typedef struct XTERM_RESOURCE {
     Boolean messages;
 
     String keyboardType;
-    Boolean sunFunctionKeys;	/* %%% should be widget resource? */
 #if OPT_SUNPC_KBD
     Boolean sunKeyboard;
 #endif
@@ -169,6 +168,9 @@ typedef struct XTERM_RESOURCE {
 #endif
 #if OPT_SCO_FUNC_KEYS
     Boolean scoFunctionKeys;
+#endif
+#if OPT_SUN_FUNC_KEYS
+    Boolean sunFunctionKeys;	/* %%% should be VT100 widget resource? */
 #endif
 
 #if OPT_INITIAL_ERASE

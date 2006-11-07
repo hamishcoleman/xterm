@@ -1,4 +1,4 @@
-/* $XTermId: trace.h,v 1.35 2005/09/18 23:48:13 tom Exp $ */
+/* $XTermId: trace.h,v 1.40 2006/08/27 17:00:36 tom Exp $ */
 
 /*
  * $XFree86: xc/programs/xterm/trace.h,v 3.17 2005/09/18 23:48:13 dickey Exp $
@@ -6,7 +6,7 @@
 
 /************************************************************
 
-Copyright 1997-2004,2005 by Thomas E. Dickey
+Copyright 1997-2005,2006 by Thomas E. Dickey
 
                         All Rights Reserved
 
@@ -50,17 +50,22 @@ extern	void	Trace ( char *, ... )
 #define TRACE2(p) Trace p
 #endif
 
-extern	char *	visibleChars (PAIRED_CHARS(Char *buf, Char *buf2), unsigned len);
+extern	char *	visibleChars (PAIRED_CHARS(Char * /* buf */, Char * /* buf2 */), unsigned /* len */);
 extern	char *	visibleIChar (IChar *, unsigned);
+extern	const char * visibleEventType (int);
+extern	const char * visibleXError (int /* code */);
 
-extern	void	TraceArgv(const char *tag, char **argv);
+extern	void	TraceArgv(const char * /* tag */, char ** /* argv */);
 #define	TRACE_ARGV(tag,argv) TraceArgv(tag,argv)
 
 extern	char	*trace_who;
-#define TRACE_CHILD int tracing_child = (trace_who = "child") != 0;
+#define TRACE_CHILD int tracing_child = (trace_who = "child") != 0; (void) tracing_child;
 
 extern	void	TraceSizeHints(XSizeHints *);
 #define	TRACE_HINTS(hints) TraceSizeHints(hints)
+
+extern	void	TraceIds(const char *fname, int lnum);
+#define	TRACE_IDS TraceIds(__FILE__, __LINE__)
 
 extern	void	TraceOptions(OptionHelp *options, XrmOptionDescRec *resources, Cardinal count);
 #define	TRACE_OPTS(opts,ress,lens) TraceOptions(opts,ress,lens)

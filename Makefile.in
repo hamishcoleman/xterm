@@ -1,6 +1,6 @@
-## $XTermId: Makefile.in,v 1.124 2006/01/04 02:10:17 tom Exp $
+## $XTermId: Makefile.in,v 1.136 2006/08/10 21:43:51 tom Exp $
 ##
-## $XFree86: xc/programs/xterm/Makefile.in,v 3.52 2006/01/04 02:10:17 dickey Exp $ ##
+## $XFree86: xc/programs/xterm/Makefile.in,v 3.56 2006/06/19 00:36:50 dickey Exp $ ##
 ##
 ## Copyright 2002-2005,2006 by Thomas E. Dickey
 ##
@@ -38,6 +38,10 @@ CPP		= @CPP@
 AWK		= @AWK@
 LINK		= $(CC) $(CFLAGS)
 
+LN_S		= @LN_S@
+RM              = rm -f
+LINT		= @LINT@
+
 INSTALL		= @INSTALL@
 INSTALL_PROGRAM	= @INSTALL_PROGRAM@
 INSTALL_SCRIPT	= @INSTALL_SCRIPT@
@@ -66,9 +70,6 @@ mandir		= @mandir@/man$(manext)
 appsdir		= @appsdir@
 
 #### End of system configuration section. ####
-
-RM              = rm -f
-LINT		= @LINT@
 
 DESTDIR		=
 BINDIR		= $(DESTDIR)$(bindir)
@@ -138,12 +139,13 @@ resize$x : $(OBJS2)
 
 charproc$o : main.h @CHARPROC_DEPS@
 
-TRANSFORM = sed 's/$x$$//'|sed '$(transform)'|sed 's/$$/$x/'
 actual_xterm  = `echo xterm|    sed '$(transform)'`
 actual_resize = `echo resize|   sed '$(transform)'`
-binary_xterm  = `echo xterm$x|  $(TRANSFORM)`
-binary_resize = `echo resize$x| $(TRANSFORM)`
-binary_uxterm = `echo uxterm|   $(TRANSFORM)`
+actual_uxterm = `echo uxterm|   sed '$(transform)'`
+
+binary_xterm  = $(actual_xterm)$x
+binary_resize = $(actual_resize)$x
+binary_uxterm = $(actual_uxterm)
 
 install \
 install-bin \
@@ -160,15 +162,18 @@ install-full :: xterm$x resize$x $(BINDIR)
 		else \
 			$(INSTALL_SCRIPT) -m  755 $(srcdir)/uxterm $(BINDIR)/$(binary_uxterm); \
 		fi'
-	@-$(SHELL) -c "test @XTERM_SYMLINK@ != NONE && cd $(BINDIR) && rm -f @XTERM_SYMLINK@"
-	@-$(SHELL) -c "test @XTERM_SYMLINK@ != NONE && cd $(BINDIR) && ln -s $(binary_xterm) @XTERM_SYMLINK@"
-	@-$(SHELL) -c "test @XTERM_SYMLINK@ != NONE && cd $(BINDIR) && echo '... created symbolic link:' && ls -l $(binary_xterm) @XTERM_SYMLINK@"
+	@-$(SHELL) -c "(test @XTERM_SYMLINK@ != NONE && cd $(BINDIR) && rm -f @XTERM_SYMLINK@) || exit 0"
+	@-$(SHELL) -c "(test @XTERM_SYMLINK@ != NONE && cd $(BINDIR) && $(LN_S) $(binary_xterm) @XTERM_SYMLINK@) || exit 0"
+	@-$(SHELL) -c "(test @XTERM_SYMLINK@ != NONE && cd $(BINDIR) && echo '... created symbolic link:' && ls -l $(binary_xterm) @XTERM_SYMLINK@) || exit 0"
 
 install \
 install-man \
 install-full :: $(MANDIR)
-	$(SHELL) $(srcdir)/minstall.sh "$(INSTALL_DATA)" $(srcdir)/xterm.man    $(MANDIR)/$(actual_xterm).$(manext)
-	$(SHELL) $(srcdir)/minstall.sh "$(INSTALL_DATA)" $(srcdir)/resize.man   $(MANDIR)/$(actual_resize).$(manext)
+	$(SHELL) $(srcdir)/minstall.sh "$(INSTALL_DATA)" $(srcdir)/xterm.man    $(MANDIR)/$(actual_xterm).$(manext)  $(appsdir)
+	$(SHELL) $(srcdir)/minstall.sh "$(INSTALL_DATA)" $(srcdir)/resize.man   $(MANDIR)/$(actual_resize).$(manext) $(appsdir)
+	@-$(SHELL) -c "(test @XTERM_SYMLINK@ != NONE && cd $(MANDIR) && rm -f @XTERM_SYMLINK@.$(manext)) || exit 0"
+	@-$(SHELL) -c "(test @XTERM_SYMLINK@ != NONE && cd $(MANDIR) && $(LN_S) $(actual_xterm).$(manext) @XTERM_SYMLINK@.$(manext)) || exit 0"
+	@-$(SHELL) -c "(test @XTERM_SYMLINK@ != NONE && cd $(MANDIR) && echo '... created symbolic link:' && ls -l $(actual_xterm).$(manext) @XTERM_SYMLINK@.$(manext)) || exit 0"
 
 @no_appsdir@install \
 @no_appsdir@install-app \
@@ -193,7 +198,7 @@ SET_TERMINFO = @SET_TERMINFO@
 
 install-full \
 install-ti :: $(TERMINFO_DIR)
-	$(SET_TERMINFO) tic $(srcdir)/terminfo
+	$(SET_TERMINFO) $(SHELL) $(srcdir)/run-tic.sh $(srcdir)/terminfo
 	@echo 'Completed installation of terminfo description.'
 
 install-full \
@@ -208,9 +213,6 @@ uninstall-full ::
 	-$(RM) $(BINDIR)/$(binary_xterm)
 	-$(RM) $(BINDIR)/$(binary_resize)
 	-$(RM) $(BINDIR)/$(binary_uxterm)
-
-uninstall-bin \
-uninstall-full ::
 	@-$(SHELL) -c "test @XTERM_SYMLINK@ != NONE && cd $(BINDIR) && rm -f @XTERM_SYMLINK@"
 
 uninstall \
@@ -218,6 +220,7 @@ uninstall-man \
 uninstall-full ::
 	-$(RM) $(MANDIR)/$(actual_xterm).$(manext)
 	-$(RM) $(MANDIR)/$(actual_resize).$(manext)
+	@-$(SHELL) -c "test @XTERM_SYMLINK@ != NONE && cd $(MANDIR) && rm -f @XTERM_SYMLINK@.$(manext)"
 
 @no_appsdir@uninstall \
 @no_appsdir@uninstall-app \
@@ -241,8 +244,11 @@ realclean : distclean
 maintainer-clean : realclean
 	-$(RM) 256colres.h 88colres.h
 
+ctlseqs.html : ctlseqs.ms
+	GROFF_NO_SGR=stupid $(SHELL) -c "tbl ctlseqs.ms | groff -Thtml -ms" >$@
+
 ctlseqs.txt : ctlseqs.ms
-	GROFF_NO_SGR=stupid $(SHELL) -c "tbl ctlseqs.ms | nroff -Tascii -ms" >$@
+	GROFF_NO_SGR=stupid $(SHELL) -c "tbl ctlseqs.ms | nroff -Tascii -ms | col -bx" >$@
 
 ctlseqs.ps : ctlseqs.ms
 	tbl ctlseqs.ms | groff -ms >$@

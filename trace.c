@@ -1,4 +1,4 @@
-/* $XTermId: trace.c,v 1.63 2005/09/18 23:48:13 tom Exp $ */
+/* $XTermId: trace.c,v 1.69 2006/08/27 17:07:05 tom Exp $ */
 
 /*
  * $XFree86: xc/programs/xterm/trace.c,v 3.23 2005/09/18 23:48:13 dickey Exp $
@@ -6,7 +6,7 @@
 
 /************************************************************
 
-Copyright 1997-2004,2005 by Thomas E. Dickey
+Copyright 1997-2005,2006 by Thomas E. Dickey
 
                         All Rights Reserved
 
@@ -94,19 +94,8 @@ Trace(char *fmt,...)
 #endif
 	fp = fopen(name, "w");
 	if (fp != 0) {
-	    time_t now = time((time_t *) 0);
 	    fprintf(fp, "%s\n", xtermVersion());
-#ifdef HAVE_UNISTD_H
-	    fprintf(fp, "process %d real (%u/%u) effective (%u/%u) -- %s",
-		    getpid(),
-		    (unsigned) getuid(), (unsigned) getgid(),
-		    (unsigned) geteuid(), (unsigned) getegid(),
-		    ctime(&now));
-#else
-	    fprintf(fp, "process %d -- %s",
-		    getpid(),
-		    ctime(&now));
-#endif
+	    TraceIds(NULL, 0);
 	}
     }
     if (!fp)
@@ -124,6 +113,23 @@ Trace(char *fmt,...)
     va_end(ap);
 }
 
+void
+TraceIds(const char *fname, int lnum)
+{
+    Trace("process %d ", getpid());
+#ifdef HAVE_UNISTD_H
+    Trace("real (%u/%u) effective (%u/%u)",
+	  (unsigned) getuid(), (unsigned) getgid(),
+	  (unsigned) geteuid(), (unsigned) getegid());
+#endif
+    if (fname != 0) {
+	Trace(" (%s@%d)\n", fname, lnum);
+    } else {
+	time_t now = time((time_t *) 0);
+	Trace("-- %s", ctime(&now));
+    }
+}
+
 char *
 visibleChars(PAIRED_CHARS(Char * buf, Char * buf2), unsigned len)
 {
@@ -137,6 +143,7 @@ visibleChars(PAIRED_CHARS(Char * buf, Char * buf2), unsigned len)
 	result = XtRealloc(result, used);
     }
     dst = result;
+    *dst = '\0';
     while (len--) {
 	unsigned value = *buf++;
 #if OPT_WIDE_CHARS
@@ -199,6 +206,80 @@ visibleKeyboardType(xtermKeyboardType type)
 	CASETYPE(keyboardIsSCO);
 	CASETYPE(keyboardIsSun);
 	CASETYPE(keyboardIsVT220);
+    }
+    return result;
+}
+
+const char *
+visibleEventType(int type)
+{
+    const char *result = "?";
+    switch (type) {
+	CASETYPE(KeyPress);
+	CASETYPE(KeyRelease);
+	CASETYPE(ButtonPress);
+	CASETYPE(ButtonRelease);
+	CASETYPE(MotionNotify);
+	CASETYPE(EnterNotify);
+	CASETYPE(LeaveNotify);
+	CASETYPE(FocusIn);
+	CASETYPE(FocusOut);
+	CASETYPE(KeymapNotify);
+	CASETYPE(Expose);
+	CASETYPE(GraphicsExpose);
+	CASETYPE(NoExpose);
+	CASETYPE(VisibilityNotify);
+	CASETYPE(CreateNotify);
+	CASETYPE(DestroyNotify);
+	CASETYPE(UnmapNotify);
+	CASETYPE(MapNotify);
+	CASETYPE(MapRequest);
+	CASETYPE(ReparentNotify);
+	CASETYPE(ConfigureNotify);
+	CASETYPE(ConfigureRequest);
+	CASETYPE(GravityNotify);
+	CASETYPE(ResizeRequest);
+	CASETYPE(CirculateNotify);
+	CASETYPE(CirculateRequest);
+	CASETYPE(PropertyNotify);
+	CASETYPE(SelectionClear);
+	CASETYPE(SelectionRequest);
+	CASETYPE(SelectionNotify);
+	CASETYPE(ColormapNotify);
+	CASETYPE(ClientMessage);
+	CASETYPE(MappingNotify);
+    }
+    return result;
+}
+
+const char *
+visibleXError(int code)
+{
+    static char temp[80];
+    const char *result = "?";
+    switch (code) {
+	CASETYPE(Success);
+	CASETYPE(BadRequest);
+	CASETYPE(BadValue);
+	CASETYPE(BadWindow);
+	CASETYPE(BadPixmap);
+	CASETYPE(BadAtom);
+	CASETYPE(BadCursor);
+	CASETYPE(BadFont);
+	CASETYPE(BadMatch);
+	CASETYPE(BadDrawable);
+	CASETYPE(BadAccess);
+	CASETYPE(BadAlloc);
+	CASETYPE(BadColor);
+	CASETYPE(BadGC);
+	CASETYPE(BadIDChoice);
+	CASETYPE(BadName);
+	CASETYPE(BadLength);
+	CASETYPE(BadImplementation);
+    default:
+	sprintf(temp, "%d", code);
+	result = temp;
+	break;
     }
     return result;
 }
@@ -300,7 +381,6 @@ TraceXtermResources(void)
     XRES_B(utmpInhibit);
     XRES_B(utmpDisplayId);
     XRES_B(messages);
-    XRES_B(sunFunctionKeys);
 #if OPT_SUNPC_KBD
     XRES_B(sunKeyboard);
 #endif
@@ -309,6 +389,9 @@ TraceXtermResources(void)
 #endif
 #if OPT_SCO_FUNC_KEYS
     XRES_B(scoFunctionKeys);
+#endif
+#if OPT_SUN_FUNC_KEYS
+    XRES_B(sunFunctionKeys);
 #endif
 #if OPT_INITIAL_ERASE
     XRES_B(ptyInitialErase);

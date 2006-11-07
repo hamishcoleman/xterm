@@ -1,10 +1,10 @@
-/* $XTermId: os2main.c,v 1.218 2006/02/13 01:14:59 tom Exp $ */
+/* $XTermId: os2main.c,v 1.233 2006/10/17 21:53:29 tom Exp $ */
 
 /* removed all foreign stuff to get the code more clear (hv)
  * and did some rewrite for the obscure OS/2 environment
  */
 
-/* $XFree86: xc/programs/xterm/os2main.c,v 3.84 2006/02/13 01:14:59 dickey Exp $ */
+/* $XFree86: xc/programs/xterm/os2main.c,v 3.87 2006/06/19 00:36:51 dickey Exp $ */
 
 /***********************************************************
 
@@ -126,7 +126,6 @@ ttyname(int fd)
 
 static SIGNAL_T reapchild(int n);
 static int spawn(void);
-static void get_terminal(void);
 static void resize(TScreen * s, char *oldtc, char *newtc);
 static void set_owner(char *device, uid_t uid, gid_t gid, mode_t mode);
 
@@ -272,7 +271,6 @@ static XtResource application_resources[] =
     Ires("minBufSize", "MinBufSize", minBufSize, 4096),
     Ires("maxBufSize", "MaxBufSize", maxBufSize, 32768),
     Sres("keyboardType", "KeyboardType", keyboardType, "unknown"),
-    Bres("sunFunctionKeys", "SunFunctionKeys", sunFunctionKeys, False),
 #if OPT_SUNPC_KBD
     Bres("sunKeyboard", "SunKeyboard", sunKeyboard, False),
 #endif
@@ -281,6 +279,9 @@ static XtResource application_resources[] =
 #endif
 #if OPT_SCO_FUNC_KEYS
     Bres("scoFunctionKeys", "ScoFunctionKeys", scoFunctionKeys, False),
+#endif
+#if OPT_SUN_FUNC_KEYS
+    Bres("sunFunctionKeys", "SunFunctionKeys", sunFunctionKeys, False),
 #endif
 #if OPT_INITIAL_ERASE
     Bres("ptyInitialErase", "PtyInitialErase", ptyInitialErase, DEF_INITIAL_ERASE),
@@ -692,7 +693,7 @@ decode_keyvalue(char **ptr, int termcap)
     if (*string == '^') {
 	switch (*++string) {
 	case '?':
-	    value = A2E(127);
+	    value = A2E(DEL);
 	    break;
 	case '-':
 	    if (!termcap) {
@@ -754,7 +755,7 @@ get_termcap(char *name, char *buffer, char *resized)
 		    ? "ok:termcap, we can update $TERMCAP"
 		    : "assuming this is terminfo")));
 	    if (*buffer) {
-		if (!TEK4014_ACTIVE(screen)) {
+		if (!TEK4014_ACTIVE(term)) {
 		    resize(screen, buffer, resized);
 		}
 	    }
@@ -874,7 +875,7 @@ DeleteWindow(Widget w,
 {
 #if OPT_TEK4014
     if (w == toplevel) {
-	if (term->screen.Tshow)
+	if (TEK4014_SHOWN(term))
 	    hide_vt_window();
 	else
 	    do_hangup(w, (XtPointer) 0, (XtPointer) 0);
@@ -916,6 +917,9 @@ main(int argc, char **argv ENVP_ARG)
     int mode;
     char *my_class = DEFCLASS;
     Window winToEmbedInto = None;
+#if OPT_COLOR_RES
+    Bool reversed = False;
+#endif
 
     /* Do these first, since we may not be able to open the display */
     ProgramName = argv[0];
@@ -940,6 +944,14 @@ main(int argc, char **argv ENVP_ARG)
 		}
 		unique = 3;
 	    } else {
+#if OPT_COLOR_RES
+		if (abbrev(argv[n], "-reverse", 2)
+		    || !strcmp("-rv", argv[n])) {
+		    reversed = True;
+		} else if (!strcmp("+rv", argv[n])) {
+		    reversed = False;
+		}
+#endif
 		quit = False;
 		unique = 3;
 	    }
@@ -981,7 +993,7 @@ main(int argc, char **argv ENVP_ARG)
     d_tio.c_lflag = ISIG | ICANON | ECHO | ECHOE | ECHOK;
     d_tio.c_line = 0;
     d_tio.c_cc[VINTR] = CONTROL('C');	/* '^C' */
-    d_tio.c_cc[VERASE] = 0x7f;	/* DEL  */
+    d_tio.c_cc[VERASE] = DEL;	/* DEL  */
     d_tio.c_cc[VKILL] = CONTROL('U');	/* '^U' */
     d_tio.c_cc[VQUIT] = CQUIT;	/* '^\' */
     d_tio.c_cc[VEOF] = CEOF;	/* '^D' */
@@ -1151,11 +1163,9 @@ main(int argc, char **argv ENVP_ARG)
 						 XtNmenuHeight, menu_high,
 #endif
 						 (XtPointer) 0);
-
-    decode_keyboard_type(&resource);
+    decode_keyboard_type(term, &resource);
 
     screen = &term->screen;
-
     screen->inhibit = 0;
 #ifdef ALLOWLOGGING
     if (term->misc.logInhibit)
@@ -1173,9 +1183,9 @@ main(int argc, char **argv ENVP_ARG)
      */
 #if OPT_TEK4014
     if (screen->inhibit & I_TEK)
-	screen->TekEmu = False;
+	TEK4014_ACTIVE(term) = False;
 
-    if (screen->TekEmu && !TekInit())
+    if (TEK4014_ACTIVE(term) && !TekInit())
 	exit(ERROR_INIT);
 #endif
 
@@ -1269,9 +1279,6 @@ main(int argc, char **argv ENVP_ARG)
     }
 #endif /* DEBUG */
 
-    /* open a terminal for client */
-    get_terminal();
-
     spawn();
 
     /* Child process is out there, let's catch its termination */
@@ -1283,7 +1290,7 @@ main(int argc, char **argv ENVP_ARG)
 	char buf[80];
 
 	buf[0] = '\0';
-	sprintf(buf, "%lx\n", XtWindow(SHELL_OF(CURRENT_EMU(screen))));
+	sprintf(buf, "%lx\n", XtWindow(SHELL_OF(CURRENT_EMU())));
 	write(screen->respond, buf, strlen(buf));
     }
 
@@ -1330,10 +1337,28 @@ main(int argc, char **argv ENVP_ARG)
 			XtWindow(toplevel),
 			winToEmbedInto, 0, 0);
     }
+#if OPT_COLOR_RES
+    TRACE(("checking resource values rv %s fg %s, bg %s\n",
+	   BtoS(term->misc.re_verse0),
+	   NonNull(term->screen.Tcolors[TEXT_FG].resource),
+	   NonNull(term->screen.Tcolors[TEXT_BG].resource)));
+
+    if ((reversed && term->misc.re_verse0)
+	&& ((term->screen.Tcolors[TEXT_FG].resource
+	     && (x_strcasecmp(term->screen.Tcolors[TEXT_FG].resource,
+			      XtDefaultForeground) != 0)
+	    )
+	    || (term->screen.Tcolors[TEXT_BG].resource
+		&& (x_strcasecmp(term->screen.Tcolors[TEXT_BG].resource,
+				 XtDefaultBackground) != 0)
+	    )
+	))
+	ReverseVideo(term);
+#endif /* OPT_COLOR_RES */
 
     for (;;) {
 #if OPT_TEK4014
-	if (screen->TekEmu)
+	if (TEK4014_ACTIVE(term))
 	    TekRun();
 	else
 #endif
@@ -1384,19 +1409,6 @@ static int
 get_pty(int *pty)
 {
     return pty_search(pty);
-}
-
-/*
- * sets up X and initializes the terminal structure except for term.buf.fildes.
- */
-static void
-get_terminal(void)
-{
-    TScreen *screen = &term->screen;
-
-    screen->arrow = make_colored_cursor(XC_left_ptr,
-					T_COLOR(screen, MOUSE_FG),
-					T_COLOR(screen, MOUSE_BG));
 }
 
 /*
@@ -1484,6 +1496,8 @@ set_owner(char *device, uid_t uid, gid_t gid, mode_t mode)
 		    device, (long) uid, (long) gid, strerror(why));
 	}
     }
+#ifndef __EMX__
+/* EMX can chmod files only, not devices */
     if (chmod(device, mode) < 0) {
 	why = errno;
 	if (why != ENOENT) {
@@ -1498,6 +1512,7 @@ set_owner(char *device, uid_t uid, gid_t gid, mode_t mode)
 	    }
 	}
     }
+#endif
 }
 
 #define THE_PARENT 1
@@ -1564,8 +1579,7 @@ spawn(void)
 	ptydev[strlen(ptydev) - 1] =
 	    ttydev[strlen(ttydev) - 1] = passedPty[1];
 
-	setgid(screen->gid);
-	setuid(screen->uid);
+	(void) xtermResetIds(screen);
     } else {
 	Bool tty_got_hung;
 
@@ -1623,12 +1637,12 @@ spawn(void)
     }
 
     /* avoid double MapWindow requests */
-    XtSetMappedWhenManaged(SHELL_OF(CURRENT_EMU(screen)), False);
+    XtSetMappedWhenManaged(SHELL_OF(CURRENT_EMU()), False);
 
     wm_delete_window = XInternAtom(XtDisplay(toplevel), "WM_DELETE_WINDOW",
 				   False);
 
-    if (!TEK4014_ACTIVE(screen))
+    if (!TEK4014_ACTIVE(term))
 	VTInit();		/* realize now so know window size for tty driver */
 
     if (Console) {
@@ -1639,12 +1653,12 @@ spawn(void)
 	XmuGetHostname(mit_console_name + MIT_CONSOLE_LEN, 255);
 	mit_console = XInternAtom(screen->display, mit_console_name, False);
 	/* the user told us to be the console, so we can use CurrentTime */
-	XtOwnSelection(SHELL_OF(CURRENT_EMU(screen)),
+	XtOwnSelection(SHELL_OF(CURRENT_EMU()),
 		       mit_console, CurrentTime,
 		       ConvertConsoleSelection, NULL, NULL);
     }
 #if OPT_TEK4014
-    if (screen->TekEmu) {
+    if (TEK4014_ACTIVE(term)) {
 	envnew = tekterm;
 	ptr = newtc;
     } else
@@ -1676,11 +1690,11 @@ spawn(void)
 
     /* tell tty how big window is */
 #if OPT_TEK4014
-    if (TEK4014_ACTIVE(screen)) {
+    if (TEK4014_ACTIVE(term)) {
 	TTYSIZE_ROWS(ts) = 38;
 	TTYSIZE_COLS(ts) = 81;
-	ts.ws_xpixel = TFullWidth(screen);
-	ts.ws_ypixel = TFullHeight(screen);
+	ts.ws_xpixel = TFullWidth(&(tekWidget->screen));
+	ts.ws_ypixel = TFullHeight(&(tekWidget->screen));
     } else
 #endif
     {
@@ -1796,7 +1810,7 @@ opencons();*/
 		*newtc = 0;
 
 	    sprintf(buf, "%lu",
-		    ((unsigned long) XtWindow(SHELL_OF(CURRENT_EMU(screen)))));
+		    ((unsigned long) XtWindow(SHELL_OF(CURRENT_EMU()))));
 	    xtermSetenv("WINDOWID=", buf);
 
 	    /* put the display into the environment of the shell */
@@ -1820,8 +1834,7 @@ opencons();*/
 		close_fd(ttyfd);
 
 	    setpgrp(0, pgrp);
-	    setgid(screen->gid);
-	    setuid(screen->uid);
+	    (void) xtermResetIds(screen);
 
 	    if (handshake.rows > 0 && handshake.cols > 0) {
 		set_max_row(screen, handshake.rows);

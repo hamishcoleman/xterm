@@ -1,6 +1,6 @@
-/* $XTermId: ptyx.h,v 1.415 2006/03/13 01:27:59 tom Exp $ */
+/* $XTermId: ptyx.h,v 1.445 2006/10/17 21:06:49 tom Exp $ */
 
-/* $XFree86: xc/programs/xterm/ptyx.h,v 3.131 2006/03/13 01:27:59 dickey Exp $ */
+/* $XFree86: xc/programs/xterm/ptyx.h,v 3.134 2006/06/19 00:36:51 dickey Exp $ */
 
 /*
  * Copyright 1999-2005,2006 by Thomas E. Dickey
@@ -143,6 +143,8 @@
 #undef USE_PTY_DEVICE
 #undef USE_PTY_SEARCH
 #elif defined(PUCC_PTYD)
+#undef USE_PTY_SEARCH
+#elif (defined(sun) && defined(SVR4)) || defined(_ALL_SOURCE) || defined(__CYGWIN__)
 #undef USE_PTY_SEARCH
 #endif
 
@@ -579,6 +581,10 @@ typedef struct {
 #define OPT_SCO_FUNC_KEYS 0 /* true if xterm supports SCO-style function keys */
 #endif
 
+#ifndef OPT_SUN_FUNC_KEYS
+#define OPT_SUN_FUNC_KEYS 1 /* true if xterm supports Sun-style function keys */
+#endif
+
 #ifndef OPT_SELECT_REGEX
 #define OPT_SELECT_REGEX 0 /* true if xterm supports regular-expression selects */
 #endif
@@ -891,10 +897,10 @@ typedef enum {
 #endif
 
 	/* the number of pointers per row in 'ScrnBuf' */
-#if OPT_ISO_COLORS || OPT_DEC_CHRSET || OPT_WIDE_CHARS
+#if OPT_WIDE_CHARS
 #define MAX_PTRS term->num_ptrs
 #else
-#define MAX_PTRS (OFF_ATTRS+1)
+#define MAX_PTRS (OFF_FINAL)
 #endif
 
 #define BUF_HEAD 1
@@ -916,13 +922,15 @@ extern int A2E(int);
 /***====================================================================***/
 
 #if OPT_TEK4014
-#define TEK4014_ACTIVE(screen) ((screen)->TekEmu)
-#define CURRENT_EMU_VAL(screen,tek,vt) (TEK4014_ACTIVE(screen) ? tek : vt)
-#define CURRENT_EMU(screen) CURRENT_EMU_VAL(screen, (Widget)tekWidget, (Widget)term)
+#define TEK4014_ACTIVE(xw)      ((xw)->misc.TekEmu)
+#define TEK4014_SHOWN(xw)       ((xw)->misc.Tshow)
+#define CURRENT_EMU_VAL(tek,vt) (TEK4014_ACTIVE(term) ? tek : vt)
+#define CURRENT_EMU()           CURRENT_EMU_VAL((Widget)tekWidget, (Widget)term)
 #else
-#define TEK4014_ACTIVE(screen) 0
-#define CURRENT_EMU_VAL(screen,tek,vt) (vt)
-#define CURRENT_EMU(screen) ((Widget)term)
+#define TEK4014_ACTIVE(screen)  0
+#define TEK4014_SHOWN(xw)       0
+#define CURRENT_EMU_VAL(tek,vt) (vt)
+#define CURRENT_EMU()           ((Widget)term)
 #endif
 
 /***====================================================================***/
@@ -1026,8 +1034,7 @@ typedef struct {
 /* The order of ifdef's matches the logic for num_ptrs in VTInitialize */
 typedef enum {
 	OFF_FLAGS = 0		/* BUF_HEAD */
-	, OFF_CHARS = 1		/* first (or only) byte of cell's character */
-	, OFF_ATTRS = 2		/* video attributes */
+	, OFF_ATTRS		/* video attributes */
 #if OPT_ISO_COLORS
 #if OPT_256_COLORS || OPT_88_COLORS
 	, OFF_FGRND		/* foreground color number */
@@ -1039,13 +1046,12 @@ typedef enum {
 #if OPT_DEC_CHRSET
 	, OFF_CSETS		/* DEC character-set */
 #endif
+	/* wide (16-bit) characters begin here */
+	, OFF_CHARS		/* first (or only) byte of cell's character */
 #if OPT_WIDE_CHARS
 	, OFF_WIDEC		/* second byte of first wide-character */
-	, OFF_COM1L		/* first combining character */
-	, OFF_COM1H
-	, OFF_COM2L		/* second combining character */
-	, OFF_COM2H
 #endif
+	, OFF_FINAL		/* first enum past fixed-offsets */
 } BufOffsets;
 
 	/*
@@ -1056,32 +1062,28 @@ typedef enum {
 #define INX2ROW(screen, inx)	((inx) - (screen)->topline)
 
 	/* ScrnBuf-level macros */
-#define BUF_FLAGS(buf, row) (buf[MAX_PTRS * (row) + OFF_FLAGS])
-#define BUF_CHARS(buf, row) (buf[MAX_PTRS * (row) + OFF_CHARS])
-#define BUF_ATTRS(buf, row) (buf[MAX_PTRS * (row) + OFF_ATTRS])
-#define BUF_COLOR(buf, row) (buf[MAX_PTRS * (row) + OFF_COLOR])
-#define BUF_FGRND(buf, row) (buf[MAX_PTRS * (row) + OFF_FGRND])
-#define BUF_BGRND(buf, row) (buf[MAX_PTRS * (row) + OFF_BGRND])
-#define BUF_CSETS(buf, row) (buf[MAX_PTRS * (row) + OFF_CSETS])
-#define BUF_WIDEC(buf, row) (buf[MAX_PTRS * (row) + OFF_WIDEC])
-#define BUF_COM1L(buf, row) (buf[MAX_PTRS * (row) + OFF_COM1L])
-#define BUF_COM1H(buf, row) (buf[MAX_PTRS * (row) + OFF_COM1H])
-#define BUF_COM2L(buf, row) (buf[MAX_PTRS * (row) + OFF_COM2L])
-#define BUF_COM2H(buf, row) (buf[MAX_PTRS * (row) + OFF_COM2H])
+#define BUFFER_PTR(buf, row, off) (buf[MAX_PTRS * (row) + off])
+
+#define BUF_FLAGS(buf, row) BUFFER_PTR(buf, row, OFF_FLAGS)
+#define BUF_CHARS(buf, row) BUFFER_PTR(buf, row, OFF_CHARS)
+#define BUF_ATTRS(buf, row) BUFFER_PTR(buf, row, OFF_ATTRS)
+#define BUF_COLOR(buf, row) BUFFER_PTR(buf, row, OFF_COLOR)
+#define BUF_FGRND(buf, row) BUFFER_PTR(buf, row, OFF_FGRND)
+#define BUF_BGRND(buf, row) BUFFER_PTR(buf, row, OFF_BGRND)
+#define BUF_CSETS(buf, row) BUFFER_PTR(buf, row, OFF_CSETS)
+#define BUF_WIDEC(buf, row) BUFFER_PTR(buf, row, OFF_WIDEC)
 
 	/* TScreen-level macros */
-#define SCRN_BUF_FLAGS(screen, row) BUF_FLAGS(screen->visbuf, row)
-#define SCRN_BUF_CHARS(screen, row) BUF_CHARS(screen->visbuf, row)
-#define SCRN_BUF_ATTRS(screen, row) BUF_ATTRS(screen->visbuf, row)
-#define SCRN_BUF_COLOR(screen, row) BUF_COLOR(screen->visbuf, row)
-#define SCRN_BUF_FGRND(screen, row) BUF_FGRND(screen->visbuf, row)
-#define SCRN_BUF_BGRND(screen, row) BUF_BGRND(screen->visbuf, row)
-#define SCRN_BUF_CSETS(screen, row) BUF_CSETS(screen->visbuf, row)
-#define SCRN_BUF_WIDEC(screen, row) BUF_WIDEC(screen->visbuf, row)
-#define SCRN_BUF_COM1L(screen, row) BUF_COM1L(screen->visbuf, row)
-#define SCRN_BUF_COM2L(screen, row) BUF_COM2L(screen->visbuf, row)
-#define SCRN_BUF_COM1H(screen, row) BUF_COM1H(screen->visbuf, row)
-#define SCRN_BUF_COM2H(screen, row) BUF_COM2H(screen->visbuf, row)
+#define SCREEN_PTR(screen, row, off) BUFFER_PTR(screen->visbuf, row, off)
+
+#define SCRN_BUF_FLAGS(screen, row) SCREEN_PTR(screen, row, OFF_FLAGS)
+#define SCRN_BUF_CHARS(screen, row) SCREEN_PTR(screen, row, OFF_CHARS)
+#define SCRN_BUF_ATTRS(screen, row) SCREEN_PTR(screen, row, OFF_ATTRS)
+#define SCRN_BUF_COLOR(screen, row) SCREEN_PTR(screen, row, OFF_COLOR)
+#define SCRN_BUF_FGRND(screen, row) SCREEN_PTR(screen, row, OFF_FGRND)
+#define SCRN_BUF_BGRND(screen, row) SCREEN_PTR(screen, row, OFF_BGRND)
+#define SCRN_BUF_CSETS(screen, row) SCREEN_PTR(screen, row, OFF_CSETS)
+#define SCRN_BUF_WIDEC(screen, row) SCREEN_PTR(screen, row, OFF_WIDEC)
 
 typedef struct {
 	unsigned	chrset;
@@ -1237,8 +1239,13 @@ typedef struct {
 	Display		*display;	/* X display for screen		*/
 	int		respond;	/* socket for responses
 					   (position report, etc.)	*/
+/* These parameters apply to VT100 window */
+	IChar		unparse_bfr[256];
+	unsigned	unparse_len;
+
 #if OPT_TCAP_QUERY
-	int		tc_query;
+	int		tc_query_code;
+	Bool		tc_query_fkey;
 #endif
 	pid_t		pid;		/* pid of process on far side   */
 	uid_t		uid;		/* user id of actual person	*/
@@ -1275,6 +1282,8 @@ typedef struct {
 	Boolean		vt100_graphics;	/* true to allow vt100-graphics	*/
 	Boolean		utf8_inparse;	/* true to enable UTF-8 parser	*/
 	int		utf8_mode;	/* use UTF-8 decode/encode: 0-2	*/
+	int		max_combining;	/* maximum # of combining chars	*/
+	Boolean		utf8_latin1;	/* use UTF-8 with Latin-1 bias	*/
 	Boolean		utf8_title;	/* use UTF-8 titles		*/
 	int		latin9_mode;	/* poor man's luit, latin9	*/
 	int		unicode_font;	/* font uses unicode encoding	*/
@@ -1296,7 +1305,6 @@ typedef struct {
 #endif
 	int		border;		/* inner border			*/
 	int		scrollBarBorder; /* scrollBar border		*/
-	Cursor		arrow;		/* arrow cursor			*/
 	unsigned long	event_mask;
 	unsigned short	send_mouse_pos;	/* user wants mouse transition  */
 					/* and position information	*/
@@ -1514,31 +1522,6 @@ typedef struct {
 	Boolean		move_sgr_ok;	/* SGR is reset on move		*/
 #endif
 
-#if OPT_TEK4014
-/* Tektronix window parameters */
-	GC		TnormalGC;	/* normal painting		*/
-	GC		TcursorGC;	/* normal cursor painting	*/
-
-	Boolean		Tshow;		/* Tek window showing		*/
-	Boolean		waitrefresh;	/* postpone refresh		*/
-	struct _tekwin	fullTwin;
-#ifndef NO_ACTIVE_ICON
-	struct _tekwin	iconTwin;
-	struct _tekwin *whichTwin;
-#endif /* NO_ACTIVE_ICON */
-
-	GC		linepat[TEKNUMLINES]; /* line patterns		*/
-	Boolean		TekEmu;		/* true if Tektronix emulation	*/
-	int		cur_X;		/* current x			*/
-	int		cur_Y;		/* current y			*/
-	Tmodes		cur;		/* current tek modes		*/
-	Tmodes		page;		/* starting tek modes on page	*/
-	int		margin;		/* 0 -> margin 1, 1 -> margin 2	*/
-	int		pen;		/* current Tektronix pen 0=up, 1=dn */
-	char		*TekGIN;	/* nonzero if Tektronix GIN mode*/
-	int		gin_terminator; /* Tek strap option */
-#endif /* OPT_TEK4014 */
-
 	/*
 	 * Bell
 	 */
@@ -1641,6 +1624,30 @@ typedef struct _TekPart {
 #endif
 } TekPart;
 
+/* Tektronix window parameters */
+typedef struct _TekScreen {
+	GC		TnormalGC;	/* normal painting		*/
+	GC		TcursorGC;	/* normal cursor painting	*/
+
+	Boolean		waitrefresh;	/* postpone refresh		*/
+	struct _tekwin	fullTwin;
+#ifndef NO_ACTIVE_ICON
+	struct _tekwin	iconTwin;
+	struct _tekwin *whichTwin;
+#endif /* NO_ACTIVE_ICON */
+
+	Cursor		arrow;		/* arrow cursor			*/
+	GC		linepat[TEKNUMLINES]; /* line patterns		*/
+	int		cur_X;		/* current x			*/
+	int		cur_Y;		/* current y			*/
+	Tmodes		cur;		/* current tek modes		*/
+	Tmodes		page;		/* starting tek modes on page	*/
+	int		margin;		/* 0 -> margin 1, 1 -> margin 2	*/
+	int		pen;		/* current Tektronix pen 0=up, 1=dn */
+	char		*TekGIN;	/* nonzero if Tektronix GIN mode*/
+	int		gin_terminator; /* Tek strap option */
+} TekScreen;
+
 #if OPT_READLINE
 #define SCREEN_FLAG(screenp,f)		(1&(screenp)->f)
 #define SCREEN_FLAG_set(screenp,f)	((screenp)->f |= 1)
@@ -1686,7 +1693,11 @@ typedef enum {			/* legal values for screen.utf8_mode */
 #define NAME_SCO_KT /*nothing*/
 #endif
 
+#if OPT_SUN_FUNC_KEYS
 #define NAME_SUN_KT " sun"
+#else
+#define NAME_SUN_KT /*nothing*/
+#endif
 
 #if OPT_SUNPC_KBD
 #define NAME_VT220_KT " vt220"
@@ -1702,12 +1713,24 @@ extern	const char * visibleKeyboardType(xtermKeyboardType);
 
 typedef struct
 {
+    int cursor_keys;		/* how to handle cursor-key modifiers */
+    int function_keys;		/* how to handle function-key modifiers */
+    int keypad_keys;		/* how to handle keypad key-modifiers */
+    int other_keys;		/* how to handle other key-modifiers */
+    int string_keys;		/* how to handle string() modifiers */
+} TModify;
+
+typedef struct
+{
     xtermKeyboardType type;
     unsigned	flags;
 #if OPT_INITIAL_ERASE
     int	reset_DECBKM;		/* reset should set DECBKM */
 #endif
-    int modify_cursor_keys;	/* how to handle modifiers */
+#if OPT_MOD_FKEYS
+    TModify modify_now;		/* current modifier value */
+    TModify modify_1st;		/* original modifier value, for resets */
+#endif
 } TKeyboard;
 
 typedef struct {
@@ -1751,6 +1774,8 @@ typedef struct _Misc {
 #if OPT_TEK4014
     Boolean tekInhibit;
     Boolean tekSmall;		/* start tek window in small size */
+    Boolean TekEmu;		/* true if Tektronix emulation	*/
+    Boolean Tshow;		/* Tek window showing		*/
 #endif
     Boolean scrollbar;
 #ifdef SCROLLBAR_RIGHT
@@ -1786,16 +1811,14 @@ typedef struct _Misc {
     Boolean real_NumLock;	/* true if we treat NumLock key specially */
     Boolean alwaysUseMods;	/* true if we always want f-key modifiers */
     unsigned long num_lock;	/* modifier for Num_Lock */
-    unsigned long alt_left;	/* modifier for Alt_L */
-    unsigned long alt_right;	/* modifier for Alt_R */
-    Boolean meta_trans;		/* true if Meta is used in translations */
-    unsigned long meta_left;	/* modifier for Meta_L */
-    unsigned long meta_right;	/* modifier for Meta_R */
+    unsigned long alt_mods;	/* modifier for Alt_L or Alt_R */
+    unsigned long meta_mods;	/* modifier for Meta_L or Meta_R */
+    unsigned long other_mods;	/* conflicting modifiers, e.g., Mode_Switch */
 #endif
 #if OPT_RENDERFONT
     char *face_name;
     char *face_wide_name;
-    float face_size;
+    float face_size[NMENUFONTS];
     Boolean render_font;
 #endif
 } Misc;
@@ -1816,6 +1839,11 @@ typedef struct _TekClassRec {
     CoreClassPart core_class;
     TekClassPart tek_class;
 } TekClassRec;
+
+extern WidgetClass tekWidgetClass;
+
+#define IsTekWidget(w) (XtClass(w) == tekWidgetClass)
+
 #endif
 
 /* define masks for keyboard.flags */
@@ -1837,6 +1865,8 @@ typedef unsigned Tabs [TAB_ARRAY_SIZE];
 
 typedef struct _XtermWidgetRec {
     CorePart	core;
+    XSizeHints	hints;
+    Bool	init_menu;
     TKeyboard	keyboard;	/* terminal keyboard		*/
     TScreen	screen;		/* terminal screen		*/
     unsigned	flags;		/* mode flags			*/
@@ -1855,14 +1885,15 @@ typedef struct _XtermWidgetRec {
     unsigned	initflags;	/* initial mode flags		*/
     Tabs	tabs;		/* tabstops of the terminal	*/
     Misc	misc;		/* miscellaneous parameters	*/
-    Bool	init_vt_menu;
-    Bool	init_tek_menu;
 } XtermWidgetRec, *XtermWidget;
 
 #if OPT_TEK4014
 typedef struct _TekWidgetRec {
-    CorePart core;
-    TekPart tek;
+    CorePart	core;
+    TekPart	tek;		/* contains resources */
+    TekScreen	screen;		/* contains working data (no resources) */
+    Bool	init_menu;
+    XSizeHints	hints;
 } TekWidgetRec, *TekWidget;
 #endif /* OPT_TEK4014 */
 
@@ -2093,6 +2124,10 @@ typedef struct Tek_Link
 
 #ifndef TRACE_HINTS
 #define TRACE_HINTS(hints) /*nothing*/
+#endif
+
+#ifndef TRACE_IDS
+#define TRACE_IDS /*nothing*/
 #endif
 
 #ifndef TRACE_OPTS
