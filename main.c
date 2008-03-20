@@ -1,4 +1,4 @@
-/* $XTermId: main.c,v 1.582 2008/01/15 23:58:01 tom Exp $ */
+/* $XTermId: main.c,v 1.586 2008/02/28 00:28:00 Matthieu.Herrb Exp $ */
 
 /*
  *				 W A R N I N G
@@ -429,6 +429,10 @@ extern struct utmp *getutid __((struct utmp * _Id));
 #undef ECHOCTL
 #endif
 
+#if defined(HAVE_SYS_TTYDEFAULTS_H) && !defined(CEOF)
+#include <sys/ttydefaults.h>
+#endif
+
 #ifdef X_NOT_POSIX
 extern long lseek();
 #if defined(USG) || defined(SVR4)
@@ -536,7 +540,7 @@ static char **command_to_exec_with_luit = NULL;
 #define CINTR    CONTROL('C')
 #endif
 #ifndef CKILL
-#define CKILL	 CTRL('U')	/* was '@' */
+#define CKILL	 CONTROL('U')	/* was '@' */
 #endif
 #ifndef CLNEXT
 #define CLNEXT   CONTROL('V')
@@ -815,6 +819,14 @@ static sigjmp_buf env;
 	    } \
 	    strncpy(dst, host, sizeof(dst)); \
 	}
+
+#ifdef HAVE_UTMP_UT_SYSLEN
+#  define SetUtmpSysLen(utmp) 			   \
+	{ \
+	    utmp.ut_host[sizeof(utmp.ut_host)-1] = '\0'; \
+	    utmp.ut_syslen = strlen(utmp.ut_host) + 1; \
+	}
+#endif
 
 /* used by VT (charproc.c) */
 
@@ -1861,10 +1873,6 @@ main(int argc, char *argv[]ENVP_ARG)
 #ifndef USE_TERMIOS		/* { */
     d_tio.c_line = 0;
 #endif /* } */
-#if defined(USE_TERMIOS) || defined(USE_POSIX_TERMIOS)	/* { */
-    d_tio.c_cc[VMIN] = 1;
-    d_tio.c_cc[VTIME] = 0;
-#endif /* } */
 #ifdef HAS_LTCHARS		/* { */
     d_ltc.t_suspc = CSUSP;	/* t_suspc */
     d_ltc.t_dsuspc = CDSUSP;	/* t_dsuspc */
@@ -1927,6 +1935,10 @@ main(int argc, char *argv[]ENVP_ARG)
 	    }
 	}
     }
+#if defined(USE_TERMIOS) || defined(USE_POSIX_TERMIOS)	/* { */
+    d_tio.c_cc[VMIN] = 1;
+    d_tio.c_cc[VTIME] = 0;
+#endif /* } */
 #ifdef HAS_LTCHARS		/* { */
     d_ltc.t_suspc = CharOf('\000');	/* t_suspc */
     d_ltc.t_dsuspc = CharOf('\000');	/* t_dsuspc */
@@ -4006,6 +4018,10 @@ spawnXTerm(XtermWidget xw)
 #ifdef HAVE_UTMP_UT_HOST
 	    SetUtmpHost(utmp.ut_host, screen);
 #endif
+#ifdef HAVE_UTMP_UT_SYSLEN
+	    SetUtmpSysLen(utmp);
+#endif
+
 	    (void) strncpy(utmp.ut_name,
 			   (login_name) ? login_name : "????",
 			   sizeof(utmp.ut_name));
@@ -4067,6 +4083,10 @@ spawnXTerm(XtermWidget xw)
 #ifdef HAVE_UTMP_UT_HOST
 		    SetUtmpHost(utmp.ut_host, screen);
 #endif
+#ifdef HAVE_UTMP_UT_SYSLEN
+		    SetUtmpSysLen(utmp);
+#endif
+
 		    utmp.ut_time = time((time_t *) 0);
 		    lseek(i, (long) (tslot * sizeof(utmp)), 0);
 		    write(i, (char *) &utmp, sizeof(utmp));
