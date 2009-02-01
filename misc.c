@@ -1,8 +1,8 @@
-/* $XTermId: misc.c,v 1.391 2008/12/30 17:44:50 tom Exp $ */
+/* $XTermId: misc.c,v 1.401 2009/01/27 00:49:39 tom Exp $ */
 
 /*
  *
- * Copyright 1999-2007,2008 by Thomas E. Dickey
+ * Copyright 1999-2008,2009 by Thomas E. Dickey
  *
  *                        All Rights Reserved
  *
@@ -54,6 +54,7 @@
  */
 
 #include <version.h>
+#include <main.h>
 #include <xterm.h>
 
 #include <sys/stat.h>
@@ -473,12 +474,12 @@ make_hidden_cursor(XtermWidget xw)
     /*
      * Prefer nil2 (which is normally available) to "fixed" (which is supposed
      * to be "always" available), since it's a smaller glyph in case the
-     * server insists on drawing _somethng_.
+     * server insists on drawing _something_.
      */
     TRACE(("Ask for nil2 font\n"));
     if ((fn = XLoadQueryFont(dpy, "nil2")) == 0) {
 	TRACE(("...Ask for fixed font\n"));
-	fn = XLoadQueryFont(dpy, "fixed");
+	fn = XLoadQueryFont(dpy, DEFFONT);
     }
 
     if (fn != 0) {
@@ -515,7 +516,7 @@ HandleKeyPressed(Widget w GCC_UNUSED,
 		 String * params GCC_UNUSED,
 		 Cardinal *nparams GCC_UNUSED)
 {
-    TRACE(("Handle 7bit-key\n"));
+    TRACE(("Handle insert-seven-bit for %p\n", w));
 #ifdef ACTIVEWINDOWINPUTONLY
     if (w == CURRENT_EMU())
 #endif
@@ -529,7 +530,7 @@ HandleEightBitKeyPressed(Widget w GCC_UNUSED,
 			 String * params GCC_UNUSED,
 			 Cardinal *nparams GCC_UNUSED)
 {
-    TRACE(("Handle 8bit-key\n"));
+    TRACE(("Handle insert-eight-bit for %p\n", w));
 #ifdef ACTIVEWINDOWINPUTONLY
     if (w == CURRENT_EMU())
 #endif
@@ -688,7 +689,7 @@ HandleInterpret(Widget w GCC_UNUSED,
 {
     if (*param_count == 1) {
 	char *value = params[0];
-	int need = strlen(value);
+	int need = (int) strlen(value);
 	int used = VTbuffer->next - VTbuffer->buffer;
 	int have = VTbuffer->last - VTbuffer->buffer;
 
@@ -971,7 +972,7 @@ dabbrev_prev_word(int *xp, int *yp, TScreen * screen)
     while ((c = dabbrev_prev_char(xp, yp, screen)) >= 0 &&
 	   IS_WORD_CONSTITUENT(c))
 	if (abword > ab)	/* store only |MAXWLEN| last chars */
-	    *(--abword) = c;
+	    *(--abword) = (char) c;
     if (c < 0) {
 	if (abword < ab + MAXWLEN - 1)
 	    return abword;
@@ -1060,14 +1061,16 @@ dabbrev_expand(TScreen * screen)
 
 /*ARGSUSED*/
 void
-HandleDabbrevExpand(Widget gw,
+HandleDabbrevExpand(Widget w,
 		    XEvent * event GCC_UNUSED,
 		    String * params GCC_UNUSED,
 		    Cardinal *nparams GCC_UNUSED)
 {
-    if (IsXtermWidget(gw)) {
-	XtermWidget w = (XtermWidget) gw;
-	TScreen *screen = &w->screen;
+    XtermWidget xw;
+
+    TRACE(("Handle dabbrev-expand for %p\n", w));
+    if ((xw = getXtermWidget(w)) != 0) {
+	TScreen *screen = &xw->screen;
 	if (!dabbrev_expand(screen))
 	    Bell(XkbBI_TerminalBell, 0);
     }
@@ -1077,26 +1080,30 @@ HandleDabbrevExpand(Widget gw,
 #if OPT_MAXIMIZE
 /*ARGSUSED*/
 void
-HandleDeIconify(Widget gw,
+HandleDeIconify(Widget w,
 		XEvent * event GCC_UNUSED,
 		String * params GCC_UNUSED,
 		Cardinal *nparams GCC_UNUSED)
 {
-    if (IsXtermWidget(gw)) {
-	TScreen *screen = TScreenOf((XtermWidget) gw);
+    XtermWidget xw;
+
+    if ((xw = getXtermWidget(w)) != 0) {
+	TScreen *screen = TScreenOf(xw);
 	XMapWindow(screen->display, VShellWindow);
     }
 }
 
 /*ARGSUSED*/
 void
-HandleIconify(Widget gw,
+HandleIconify(Widget w,
 	      XEvent * event GCC_UNUSED,
 	      String * params GCC_UNUSED,
 	      Cardinal *nparams GCC_UNUSED)
 {
-    if (IsXtermWidget(gw)) {
-	TScreen *screen = TScreenOf((XtermWidget) gw);
+    XtermWidget xw;
+
+    if ((xw = getXtermWidget(w)) != 0) {
+	TScreen *screen = TScreenOf(xw);
 	XIconifyWindow(screen->display,
 		       VShellWindow,
 		       DefaultScreen(screen->display));
@@ -1146,9 +1153,9 @@ QueryMaximize(XtermWidget termw, unsigned *width, unsigned *height)
 		   hints.max_height));
 
 	    if ((unsigned) hints.max_width < *width)
-		*width = hints.max_width;
+		*width = (unsigned) hints.max_width;
 	    if ((unsigned) hints.max_height < *height)
-		*height = hints.max_height;
+		*height = (unsigned) hints.max_height;
 	}
 	return 1;
     }
@@ -1180,8 +1187,8 @@ RequestMaximize(XtermWidget termw, int maximize)
 			screen->restore_data = True;
 			screen->restore_x = wm_attrs.x + wm_attrs.border_width;
 			screen->restore_y = wm_attrs.y + wm_attrs.border_width;
-			screen->restore_width = vshell_attrs.width;
-			screen->restore_height = vshell_attrs.height;
+			screen->restore_width = (unsigned) vshell_attrs.width;
+			screen->restore_height = (unsigned) vshell_attrs.height;
 			TRACE(("HandleMaximize: save window position %d,%d size %d,%d\n",
 			       screen->restore_x,
 			       screen->restore_y,
@@ -1190,9 +1197,11 @@ RequestMaximize(XtermWidget termw, int maximize)
 		    }
 
 		    /* subtract wm decoration dimensions */
-		    root_width -= ((wm_attrs.width - vshell_attrs.width)
-				   + (wm_attrs.border_width * 2));
-		    root_height -= ((wm_attrs.height - vshell_attrs.height)
+		    root_width -=
+			(unsigned) ((wm_attrs.width - vshell_attrs.width)
+				    + (wm_attrs.border_width * 2));
+		    root_height -=
+			(unsigned) ((wm_attrs.height - vshell_attrs.height)
 				    + (wm_attrs.border_width * 2));
 
 		    XMoveResizeWindow(screen->display, VShellWindow,
@@ -1224,25 +1233,29 @@ RequestMaximize(XtermWidget termw, int maximize)
 
 /*ARGSUSED*/
 void
-HandleMaximize(Widget gw,
+HandleMaximize(Widget w,
 	       XEvent * event GCC_UNUSED,
 	       String * params GCC_UNUSED,
 	       Cardinal *nparams GCC_UNUSED)
 {
-    if (IsXtermWidget(gw)) {
-	RequestMaximize((XtermWidget) gw, 1);
+    XtermWidget xw;
+
+    if ((xw = getXtermWidget(w)) != 0) {
+	RequestMaximize(xw, 1);
     }
 }
 
 /*ARGSUSED*/
 void
-HandleRestoreSize(Widget gw,
+HandleRestoreSize(Widget w,
 		  XEvent * event GCC_UNUSED,
 		  String * params GCC_UNUSED,
 		  Cardinal *nparams GCC_UNUSED)
 {
-    if (IsXtermWidget(gw)) {
-	RequestMaximize((XtermWidget) gw, 0);
+    XtermWidget xw;
+
+    if ((xw = getXtermWidget(w)) != 0) {
+	RequestMaximize(xw, 0);
     }
 }
 #endif /* OPT_MAXIMIZE */
@@ -2701,7 +2714,7 @@ static void
 parse_ansi_params(ANSI * params, char **string)
 {
     char *cp = *string;
-    short nparam = 0;
+    ParmType nparam = 0;
 
     memset(params, 0, sizeof(*params));
     while (*cp != '\0') {
@@ -3875,4 +3888,26 @@ xtermVersion(void)
 	}
     }
     return result;
+}
+
+/*
+ * Check if the current widget, or any parent, is the VT100 "xterm" widget.
+ */
+XtermWidget
+getXtermWidget(Widget w)
+{
+    XtermWidget xw;
+
+    if (w == 0) {
+	xw = (XtermWidget) CURRENT_EMU();
+	if (!IsXtermWidget(xw)) {
+	    xw = 0;
+	}
+    } else if (IsXtermWidget(w)) {
+	xw = (XtermWidget) w;
+    } else {
+	xw = getXtermWidget(XtParent(w));
+    }
+    TRACE(("getXtermWidget %p -> %p\n", w, xw));
+    return xw;
 }
