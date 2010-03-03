@@ -1,8 +1,8 @@
-/* $XTermId: charproc.c,v 1.1020 2009/12/10 09:24:04 tom Exp $ */
+/* $XTermId: charproc.c,v 1.1033 2010/01/20 01:59:19 tom Exp $ */
 
 /*
 
-Copyright 1999-2008,2009 by Thomas E. Dickey
+Copyright 1999-2009,2010 by Thomas E. Dickey
 
                         All Rights Reserved
 
@@ -137,6 +137,9 @@ typedef struct {
     int code;
 } FlagList;
 
+typedef void (*BitFunc) (unsigned * /* p */ ,
+			 unsigned /* mask */ );
+
 static IChar doinput(void);
 static int set_character_class(char * /*s */ );
 static void FromAlternate(XtermWidget /* xw */ );
@@ -144,14 +147,16 @@ static void RequestResize(XtermWidget /* xw */ ,
 			  int /* rows */ ,
 			  int /* cols */ ,
 			  Bool /* text */ );
-static void SwitchBufs(XtermWidget xw);
+static void SwitchBufs(XtermWidget /* xw */ ,
+		       int /* toBuf */ );
 static void ToAlternate(XtermWidget /* xw */ );
 static void ansi_modes(XtermWidget termw,
-		       void (*func) (unsigned *p, unsigned mask));
+		       BitFunc /* func */ );
 static void bitclr(unsigned *p, unsigned mask);
 static void bitcpy(unsigned *p, unsigned q, unsigned mask);
 static void bitset(unsigned *p, unsigned mask);
-static void dpmodes(XtermWidget termw, void (*func) (unsigned *p, unsigned mask));
+static void dpmodes(XtermWidget /* xw */ ,
+		    BitFunc /* func */ );
 static void restoremodes(XtermWidget /* xw */ );
 static void savemodes(XtermWidget /* xw */ );
 static void window_ops(XtermWidget /* xw */ );
@@ -330,6 +335,7 @@ static XtActionsRec actionsList[] = {
     { "set-logging",		HandleLogging },
 #endif
 #if OPT_ALLOW_XXX_OPS
+    { "allow-color-ops",	HandleAllowColorOps },
     { "allow-font-ops",		HandleAllowFontOps },
     { "allow-tcap-ops",		HandleAllowTcapOps },
     { "allow-title-ops",	HandleAllowTitleOps },
@@ -408,6 +414,7 @@ static XtActionsRec actionsList[] = {
 static XtResource xterm_resources[] =
 {
     Bres(XtNallowSendEvents, XtCAllowSendEvents, screen.allowSendEvent0, False),
+    Bres(XtNallowColorOps, XtCAllowColorOps, screen.allowColorOp0, DEF_ALLOW_COLOR),
     Bres(XtNallowFontOps, XtCAllowFontOps, screen.allowFontOp0, DEF_ALLOW_FONT),
     Bres(XtNallowTcapOps, XtCAllowTcapOps, screen.allowTcapOp0, DEF_ALLOW_TCAP),
     Bres(XtNallowTitleOps, XtCAllowTitleOps, screen.allowTitleOp0, DEF_ALLOW_TITLE),
@@ -496,6 +503,12 @@ static XtResource xterm_resources[] =
     Sres(XtNcharClass, XtCCharClass, screen.charClass, NULL),
     Sres(XtNdecTerminalID, XtCDecTerminalID, screen.term_id, DFT_DECID),
     Sres(XtNdefaultString, XtCDefaultString, screen.default_string, "#"),
+    Sres(XtNdisallowedColorOps, XtCDisallowedColorOps,
+	 screen.disallowedColorOps, DEF_DISALLOWED_COLOR),
+    Sres(XtNdisallowedFontOps, XtCDisallowedFontOps,
+	 screen.disallowedFontOps, DEF_DISALLOWED_FONT),
+    Sres(XtNdisallowedTcapOps, XtCDisallowedTcapOps,
+	 screen.disallowedTcapOps, DEF_DISALLOWED_TCAP),
     Sres(XtNdisallowedWindowOps, XtCDisallowedWindowOps,
 	 screen.disallowedWinOps, DEF_DISALLOWED_WINDOW),
     Sres(XtNeightBitSelectTypes, XtCEightBitSelectTypes,
@@ -3109,6 +3122,52 @@ doparsing(XtermWidget xw, unsigned c, struct ParseState *sp)
 	case CASE_CSI_IGNORE:
 	    sp->parsestate = cigtable;
 	    break;
+
+	case CASE_DECSWBV:
+	    TRACE(("CASE_DECSWBV\n"));
+	    switch ((nparam >= 1) ? param[0] : DEFAULT) {
+	    case 2:
+	    case 3:
+	    case 4:
+		screen->warningVolume = bvLow;
+		break;
+	    case 5:
+	    case 6:
+	    case 7:
+	    case 8:
+		screen->warningVolume = bvHigh;
+		break;
+	    default:
+		screen->warningVolume = bvOff;
+		break;
+	    }
+	    TRACE(("...warningVolume %d\n", screen->warningVolume));
+	    sp->parsestate = sp->groundtable;
+	    break;
+
+	case CASE_DECSMBV:
+	    TRACE(("CASE_DECSMBV\n"));
+	    switch ((nparam >= 1) ? param[0] : DEFAULT) {
+	    case 2:
+	    case 3:
+	    case 4:
+		screen->marginVolume = bvLow;
+		break;
+	    case 0:
+	    case DEFAULT:
+	    case 5:
+	    case 6:
+	    case 7:
+	    case 8:
+		screen->marginVolume = bvHigh;
+		break;
+	    default:
+		screen->marginVolume = bvOff;
+		break;
+	    }
+	    TRACE(("...marginVolume %d\n", screen->marginVolume));
+	    sp->parsestate = sp->groundtable;
+	    break;
 	}
 	if (sp->parsestate == sp->groundtable)
 	    sp->lastchar = thischar;
@@ -3900,8 +3959,7 @@ ToggleCursorBlink(TScreen * screen)
  * process ANSI modes set, reset
  */
 static void
-ansi_modes(XtermWidget xw,
-	   void (*func) (unsigned *p, unsigned mask))
+ansi_modes(XtermWidget xw, BitFunc func)
 {
     int i;
 
@@ -3955,8 +4013,7 @@ really_set_mousemode(XtermWidget xw,
  * process DEC private modes set, reset
  */
 static void
-dpmodes(XtermWidget xw,
-	void (*func) (unsigned *p, unsigned mask))
+dpmodes(XtermWidget xw, BitFunc func)
 {
     TScreen *screen = TScreenOf(xw);
     int i, j;
@@ -4094,7 +4151,7 @@ dpmodes(XtermWidget xw,
 	case 44:		/* margin bell                  */
 	    set_bool_mode(screen->marginbell);
 	    if (!screen->marginbell)
-		screen->bellarmed = -1;
+		screen->bellArmed = -1;
 	    update_marginbell();
 	    break;
 	case 45:		/* reverse wraparound   */
@@ -4514,7 +4571,7 @@ restoremodes(XtermWidget xw)
 	    break;
 	case 44:		/* margin bell                  */
 	    if ((DoRM(DP_X_MARGIN, screen->marginbell)) == 0)
-		screen->bellarmed = -1;
+		screen->bellArmed = -1;
 	    update_marginbell();
 	    break;
 	case 45:		/* reverse wraparound   */
@@ -5139,7 +5196,7 @@ ToAlternate(XtermWidget xw)
 						    (unsigned) MaxRows(screen),
 						    (unsigned) MaxCols(screen),
 						    &screen->editBuf_data[1]);
-	SwitchBufs(xw);
+	SwitchBufs(xw, 1);
 	screen->whichBuf = 1;
 #if OPT_SAVE_LINES
 	screen->visbuf = screen->editBuf_index[screen->whichBuf];
@@ -5158,7 +5215,7 @@ FromAlternate(XtermWidget xw)
 	if (screen->scroll_amt)
 	    FlushScroll(xw);
 	screen->whichBuf = 0;
-	SwitchBufs(xw);
+	SwitchBufs(xw, 0);
 #if OPT_SAVE_LINES
 	screen->visbuf = screen->editBuf_index[screen->whichBuf];
 #endif
@@ -5167,7 +5224,7 @@ FromAlternate(XtermWidget xw)
 }
 
 static void
-SwitchBufs(XtermWidget xw)
+SwitchBufs(XtermWidget xw, int toBuf)
 {
     TScreen *screen = TScreenOf(xw);
     int rows, top;
@@ -5176,11 +5233,12 @@ SwitchBufs(XtermWidget xw)
 	HideCursor();
 
     rows = MaxRows(screen);
-    SwitchBufPtrs(screen);
+    SwitchBufPtrs(screen, toBuf);
 
     if ((top = INX2ROW(screen, 0)) < rows) {
-	if (screen->scroll_amt)
+	if (screen->scroll_amt) {
 	    FlushScroll(xw);
+	}
 	XClearArea(screen->display,
 		   VWindow(screen),
 		   (int) OriginX(screen),
@@ -5206,11 +5264,11 @@ CheckBufPtrs(TScreen * screen)
  * Swap buffer line pointers between alternate and regular screens.
  */
 void
-SwitchBufPtrs(TScreen * screen)
+SwitchBufPtrs(TScreen * screen, int toBuf GCC_UNUSED)
 {
     if (CheckBufPtrs(screen)) {
 #if OPT_SAVE_LINES
-	screen->visbuf = screen->editBuf_index[screen->whichBuf];
+	screen->visbuf = screen->editBuf_index[toBuf];
 #else
 	size_t len = ScrnPointers(screen, (unsigned) MaxRows(screen));
 
@@ -5717,6 +5775,7 @@ ParseList(const char **source)
     const char *next;
     unsigned size;
     char *value = 0;
+    char *result;
 
     /* ignore empty values */
     while (*base == ',')
@@ -5735,7 +5794,9 @@ ParseList(const char **source)
     } else {
 	*source = base;
     }
-    return x_strtrim(value);
+    result = x_strtrim(value);
+    free(value);
+    return result;
 }
 
 static void
@@ -5757,7 +5818,7 @@ set_flags_from_list(char *target,
 	    char *temp;
 
 	    value = (int) strtol(next, &temp, 0);
-	    if (temp != 0 && *temp != '\0') {
+	    if (!IsEmpty(temp)) {
 		fprintf(stderr, "Expected a number: %s\n", next);
 	    } else {
 		for (n = 0; n < limit; ++n) {
@@ -5799,6 +5860,31 @@ VTInitialize(Widget wrequest,
 #define TxtBg(name) !x_strcasecmp(Kolor(Tcolors[TEXT_BG]), Kolor(name))
 #define DftFg(name) isDefaultForeground(Kolor(name))
 #define DftBg(name) isDefaultBackground(Kolor(name))
+
+#define DATA(name) { #name, ec##name }
+    static FlagList tblColorOps[] =
+    {
+	DATA(SetColor)
+	,DATA(GetColor)
+	,DATA(GetAnsiColor)
+    };
+#undef DATA
+
+#define DATA(name) { #name, ef##name }
+    static FlagList tblFontOps[] =
+    {
+	DATA(SetFont)
+	,DATA(GetFont)
+    };
+#undef DATA
+
+#define DATA(name) { #name, et##name }
+    static FlagList tblTcapOps[] =
+    {
+	DATA(SetTcap)
+	,DATA(GetTcap)
+    };
+#undef DATA
 
 #define DATA(name) { #name, ew##name }
     static FlagList tblWindowOps[] =
@@ -6045,10 +6131,32 @@ VTInitialize(Widget wrequest,
     init_Bres(screen.meta_sends_esc);
 
     init_Bres(screen.allowSendEvent0);
+    init_Bres(screen.allowColorOp0);
     init_Bres(screen.allowFontOp0);
     init_Bres(screen.allowTcapOp0);
     init_Bres(screen.allowTitleOp0);
     init_Bres(screen.allowWindowOp0);
+
+    init_Sres(screen.disallowedColorOps);
+
+    set_flags_from_list(TScreenOf(wnew)->disallow_color_ops,
+			TScreenOf(wnew)->disallowedColorOps,
+			tblColorOps,
+			ecLAST);
+
+    init_Sres(screen.disallowedFontOps);
+
+    set_flags_from_list(TScreenOf(wnew)->disallow_font_ops,
+			TScreenOf(wnew)->disallowedFontOps,
+			tblFontOps,
+			efLAST);
+
+    init_Sres(screen.disallowedTcapOps);
+
+    set_flags_from_list(TScreenOf(wnew)->disallow_tcap_ops,
+			TScreenOf(wnew)->disallowedTcapOps,
+			tblTcapOps,
+			etLAST);
 
     init_Sres(screen.disallowedWinOps);
 
@@ -6065,6 +6173,7 @@ VTInitialize(Widget wrequest,
 
     /* make a copy so that editres cannot change the resource after startup */
     TScreenOf(wnew)->allowSendEvents = TScreenOf(wnew)->allowSendEvent0;
+    TScreenOf(wnew)->allowColorOps = TScreenOf(wnew)->allowColorOp0;
     TScreenOf(wnew)->allowFontOps = TScreenOf(wnew)->allowFontOp0;
     TScreenOf(wnew)->allowTcapOps = TScreenOf(wnew)->allowTcapOp0;
     TScreenOf(wnew)->allowTitleOps = TScreenOf(wnew)->allowTitleOp0;
@@ -6314,7 +6423,7 @@ VTInitialize(Widget wrequest,
     init_Bres(misc.render_font);
     /* minor tweak to make debug traces consistent: */
     if (wnew->misc.render_font) {
-	if (wnew->misc.face_name == 0) {
+	if (IsEmpty(wnew->misc.face_name)) {
 	    wnew->misc.render_font = False;
 	    TRACE(("reset render_font since there is no face_name\n"));
 	}
@@ -6430,10 +6539,11 @@ VTInitialize(Widget wrequest,
     if (!GravityIsNorthWest(wnew) &&
 	!GravityIsSouthWest(wnew)) {
 	char value[80];
-	char *temp[2];
+	String temp[2];
 	Cardinal nparams = 1;
 
-	sprintf(temp[0] = value, "%d", wnew->misc.resizeGravity);
+	sprintf(value, "%d", wnew->misc.resizeGravity);
+	temp[0] = value;
 	temp[1] = 0;
 	XtAppWarningMsg(app_con, "rangeError", "resizeGravity", "XTermError",
 			"unsupported resizeGravity resource value (%s)",
@@ -6519,19 +6629,6 @@ releaseWindowGCs(XtermWidget xw, VTwin * win)
 	    free(name); \
 	    name = 0; \
 	}
-
-#ifdef NO_LEAKS
-#if OPT_RENDERFONT
-static void
-xtermCloseXft(TScreen * screen, XTermXftFonts * pub)
-{
-    if (pub->font != 0) {
-	XftFontClose(screen->display, pub->font);
-	pub->font = 0;
-    }
-}
-#endif
-#endif
 
 #if OPT_INPUT_METHOD
 static void
@@ -7910,6 +8007,8 @@ RestartBlinking(TScreen * screen GCC_UNUSED)
 void
 VTReset(XtermWidget xw, Bool full, Bool saved)
 {
+    static char empty[1];
+
     TScreen *screen = TScreenOf(xw);
 
     if (!XtIsRealized((Widget) xw) || (CURRENT_EMU() != (Widget) xw)) {
@@ -7932,7 +8031,7 @@ VTReset(XtermWidget xw, Bool full, Bool saved)
 
     if_OPT_ISO_COLORS(screen, {
 	reset_SGR_Colors(xw);
-	if (ResetAnsiColorRequest(xw, "", 0))
+	if (ResetAnsiColorRequest(xw, empty, 0))
 	    xtermRepaint(xw);
     });
 
@@ -8056,7 +8155,7 @@ set_character_class(char *s)
     int base;			/* 8, 10, 16 (octal, decimal, hex) */
     int numbers;		/* count of numbers per range */
     int digits;			/* count of digits in a number */
-    static char *errfmt = "%s:  %s in range string \"%s\" (position %d)\n";
+    static const char *errfmt = "%s:  %s in range string \"%s\" (position %d)\n";
 
     if (!s || !s[0])
 	return -1;
@@ -8250,7 +8349,7 @@ DoSetSelectedFont(Widget w,
     } else {
 	Boolean failed = False;
 	int oldFont = TScreenOf(xw)->menu_font_number;
-	char *save = TScreenOf(xw)->MenuFontName(fontMenu_fontsel);
+	String save = TScreenOf(xw)->MenuFontName(fontMenu_fontsel);
 	char *val;
 	char *test = 0;
 	char *used = 0;
