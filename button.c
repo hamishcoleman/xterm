@@ -1,7 +1,7 @@
-/* $XTermId: button.c,v 1.390 2010/10/22 00:53:57 tom Exp $ */
+/* $XTermId: button.c,v 1.395 2011/02/09 10:15:46 tom Exp $ */
 
 /*
- * Copyright 1999-2009,2010 by Thomas E. Dickey
+ * Copyright 1999-2010,2011 by Thomas E. Dickey
  *
  *                         All Rights Reserved
  *
@@ -1117,54 +1117,18 @@ HandleKeyboardSelectEnd(Widget w,
 }
 
 /*
- * Like "select-end" (optionally copies the selection to the given targets),
- * but also sets the modes so that releasing the mouse button or moving the
- * mouse does not alter the selection.
+ * Copy the selection data to the given target(s).
  */
-static void
-do_select_stop(XtermWidget xw,
-	       XEvent * event,	/* must be XButtonEvent */
-	       String * params,	/* selections */
-	       Cardinal *num_params,
-	       Bool use_cursor_loc)
-{
-    TScreen *screen = TScreenOf(xw);
-
-    screen->selection_time = event->xbutton.time;
-    switch (screen->eventMode) {
-    case NORMAL:
-	(void) SendMousePosition(xw, event);
-	break;
-    case LEFTEXTENSION:
-    case RIGHTEXTENSION:
-	EndExtend(xw, event, params, *num_params, use_cursor_loc);
-	break;
-    }
-}
-
 void
-HandleSelectStop(Widget w,
-		 XEvent * event,	/* must be XButtonEvent */
-		 String * params,	/* selections */
-		 Cardinal *num_params)
+HandleCopySelection(Widget w,
+		    XEvent * event,
+		    String * params,	/* list of targets */
+		    Cardinal *num_params)
 {
     XtermWidget xw;
 
     if ((xw = getXtermWidget(w)) != 0) {
-	do_select_stop(xw, event, params, num_params, False);
-    }
-}
-
-void
-HandleKeyboardSelectStop(Widget w,
-			 XEvent * event,	/* must be XButtonEvent */
-			 String * params,	/* selections */
-			 Cardinal *num_params)
-{
-    XtermWidget xw;
-
-    if ((xw = getXtermWidget(w)) != 0) {
-	do_select_stop(xw, event, params, num_params, True);
+	SelectSet(xw, event, params, *num_params);
     }
 }
 
@@ -1297,8 +1261,7 @@ xtermUtf8ToTextList(XtermWidget xw,
 		(void) UTF8toLatin1(screen, data, size, &size);
 		new_size += size + 1;
 	    }
-	    new_text_list =
-		(char **) XtMalloc((Cardinal) sizeof(char *) * (unsigned) *text_list_count);
+	    new_text_list = TypeXtMallocN(char *, *text_list_count);
 	    new_text_list[0] = tmp = XtMalloc((Cardinal) new_size);
 	    for (i = 0; i < (*text_list_count); ++i) {
 		data = (Char *) (*text_list)[i];
@@ -1378,8 +1341,7 @@ overrideTargets(Widget w, String value, Atom ** resultp)
 		    if (copied[n] == ',')
 			++count;
 		}
-		result = (Atom *) XtMalloc(((2 * count) + 1)
-					   * (Cardinal) sizeof(Atom));
+		result = TypeXtMallocN(Atom, (2 * count) + 1);
 		if (result == NULL) {
 		    TRACE(("Couldn't allocate selection types\n"));
 		} else {
@@ -1391,7 +1353,7 @@ overrideTargets(Widget w, String value, Atom ** resultp)
 			size_t len = strlen(listp);
 
 			if (len == 0) {
-			    ;
+			    /* EMPTY */ ;
 			}
 #if OPT_WIDE_CHARS
 			else if (sameItem(listp, "UTF8")) {
@@ -1439,7 +1401,7 @@ allocUtf8Targets(Widget w, TScreen * screen)
 	Atom *result;
 
 	if (!overrideTargets(w, screen->utf8_select_types, &result)) {
-	    result = (Atom *) XtMalloc((Cardinal) (5 * sizeof(Atom)));
+	    result = TypeXtMallocN(Atom, 5);
 	    if (result == NULL) {
 		TRACE(("Couldn't allocate utf-8 selection targets\n"));
 	    } else {
@@ -1473,7 +1435,7 @@ alloc8bitTargets(Widget w, TScreen * screen)
 	Atom *result = 0;
 
 	if (!overrideTargets(w, screen->eightbit_select_types, &result)) {
-	    result = (Atom *) XtMalloc((Cardinal) (5 * sizeof(Atom)));
+	    result = TypeXtMallocN(Atom, 5);
 	    if (result == NULL) {
 		TRACE(("Couldn't allocate 8bit selection targets\n"));
 	    } else {
@@ -1718,7 +1680,7 @@ xtermGetSelection(Widget w,
 
 	    if (num_params) {
 		/* 'list' is freed in SelectionReceived */
-		list = XtNew(struct _SelectionList);
+		list = TypeXtMalloc(struct _SelectionList);
 		if (list != 0) {
 		    list->params = params;
 		    list->count = num_params;
@@ -2020,7 +1982,7 @@ SelectionReceived(Widget w,
 
 #if OPT_PASTE64
 	if (screen->base64_paste) {
-	    ;
+	    /* EMPTY */ ;
 	} else
 #endif
 #if OPT_READLINE
@@ -3669,10 +3631,10 @@ ConvertSelection(Widget w,
 	    Atom *my_targets = _SelectionTargets(w);
 
 	    TRACE(("XmuConvertStandardSelection - success\n"));
-	    std_targets = (Atom *) (std_return);
+	    std_targets = (Atom *) (void *) (std_return);
 	    *length = std_length + 6;
 
-	    targetP = (Atom *) XtMalloc((Cardinal) (sizeof(Atom) * (*length)));
+	    targetP = TypeXtMallocN(Atom, *length);
 	    allocP = targetP;
 
 	    *value = (XtPointer) targetP;
@@ -3857,7 +3819,7 @@ _OwnSelection(XtermWidget xw,
 
     if (count > screen->sel_atoms_size) {
 	XtFree((char *) atoms);
-	atoms = (Atom *) XtMalloc((Cardinal) (count * sizeof(Atom)));
+	atoms = TypeXtMallocN(Atom, count);
 	screen->selection_atoms = atoms;
 	screen->sel_atoms_size = count;
     }
@@ -4082,8 +4044,7 @@ SaveText(TScreen * screen,
 */
 
 /* Position: 32 - 255. */
-
-static Char
+static int
 BtnCode(XButtonEvent * event, int button)
 {
     int result = (int) (32 + (KeyState(event->state) << 2));
@@ -4097,7 +4058,21 @@ BtnCode(XButtonEvent * event, int button)
 	    result += 32;
 	result += button;
     }
-    return CharOf(result);
+    return result;
+}
+
+static unsigned
+EmitButtonCode(TScreen * screen, Char * line, unsigned count, XButtonEvent * event)
+{
+    int value = BtnCode(event, screen->mouse_button);
+
+    if (!screen->ext_mode_mouse || value < 128) {
+	line[count++] = CharOf(value);
+    } else {
+	line[count++] = CharOf(0xC0 + (value >> 6));
+	line[count++] = CharOf(0x80 + (value & 0x3F));
+    }
+    return count;
 }
 
 static void
@@ -4163,7 +4138,8 @@ EditorButton(XtermWidget xw, XButtonEvent * event)
 	/* Button-Motion events */
 	switch (event->type) {
 	case ButtonPress:
-	    line[count++] = BtnCode(event, screen->mouse_button = button);
+	    screen->mouse_button = button;
+	    count = EmitButtonCode(screen, line, count, event);
 	    break;
 	case ButtonRelease:
 	    /*
@@ -4173,7 +4149,8 @@ EditorButton(XtermWidget xw, XButtonEvent * event)
 	     */
 	    if (button < 3)
 		button = -1;
-	    line[count++] = BtnCode(event, screen->mouse_button = button);
+	    screen->mouse_button = button;
+	    count = EmitButtonCode(screen, line, count, event);
 	    break;
 	case MotionNotify:
 	    /* BTN_EVENT_MOUSE and ANY_EVENT_MOUSE modes send motion
@@ -4183,7 +4160,7 @@ EditorButton(XtermWidget xw, XButtonEvent * event)
 		&& (col == screen->mouse_col)) {
 		changed = False;
 	    } else {
-		line[count++] = BtnCode(event, screen->mouse_button);
+		count = EmitButtonCode(screen, line, count, event);
 	    }
 	    break;
 	default:

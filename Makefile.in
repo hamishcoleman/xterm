@@ -1,4 +1,4 @@
-## $XTermId: Makefile.in,v 1.172 2010/10/23 18:15:25 tom Exp $
+## $XTermId: Makefile.in,v 1.174 2010/11/24 11:21:01 tom Exp $
 # -----------------------------------------------------------------------------
 # this file is part of xterm
 #
@@ -339,8 +339,11 @@ mostlyclean :
 clean : mostlyclean
 	-$(RM) $(PROGRAMS)
 
-distclean : clean
+distclean :: clean
 	-$(RM) Makefile config.status config.cache config.log xtermcfg.h
+
+distclean \
+docs-clean ::
 	-$(RM) *.ps *.pdf *.png
 	-$(SHELL) -c 'for p in xterm resize uxterm koi8rxterm; \
 	do \
@@ -357,6 +360,7 @@ maintainer-clean : realclean
 terminfo.out : terminfo		; tic -a -I -1 terminfo >$@
 termcap.out : termcap		; tic -a -C -U termcap >$@
 ################################################################################
+docs-ctlseqs \
 docs :: ctlseqs.html \
 	ctlseqs.pdf \
 	ctlseqs.ps \
@@ -366,6 +370,7 @@ ctlseqs.pdf : ctlseqs.ps
 ctlseqs.ps : ctlseqs.ms
 ctlseqs.txt : ctlseqs.ms
 ################################################################################
+docs-resize \
 docs :: resize.html \
 	resize.pdf \
 	resize.ps \
@@ -375,6 +380,7 @@ resize.pdf : resize.ps
 resize.ps : resize.$(manext)
 resize.txt : resize.$(manext)
 ################################################################################
+docs-xterm \
 docs :: xterm.html \
 	xterm.pdf \
 	xterm.ps \
@@ -384,6 +390,7 @@ xterm.pdf : xterm.ps
 xterm.ps : xterm.$(manext)
 xterm.txt : xterm.$(manext)
 ################################################################################
+docs-uxterm \
 docs :: uxterm.html \
 	uxterm.pdf \
 	uxterm.ps \
@@ -393,6 +400,7 @@ uxterm.pdf : uxterm.ps
 uxterm.ps : uxterm.$(manext)
 uxterm.txt : uxterm.$(manext)
 ################################################################################
+docs-koi8rxterm \
 docs :: koi8rxterm.html \
 	koi8rxterm.pdf \
 	koi8rxterm.ps \

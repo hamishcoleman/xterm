@@ -1,8 +1,8 @@
-# $XTermId: xterm.spec,v 1.5 2010/10/24 21:20:10 tom Exp $
+# $XTermId: xterm.spec,v 1.7 2010/11/24 11:16:58 tom Exp $
 Summary: A text-based Web browser
 Name: xterm
 Version: dev
-Release: 266
+Release: 268
 License: X11
 Group: Applications/Internet
 Source: xterm-%{release}.tgz
