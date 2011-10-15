@@ -1,3 +1,33 @@
+xterm-dev (276) unstable; urgency=low
+
+  * Regressions in #272, #274.
+
+ -- Thomas E. Dickey <dickey@invisible-island.net>  Wed, 28 Sep 2011 17:34:20 -0400
+
+xterm-dev (275) unstable; urgency=low
+
+  * Regressions in #272, #274.
+
+ -- Thomas E. Dickey <dickey@invisible-island.net>  Sun, 11 Sep 2011 09:46:57 -0400
+
+xterm-dev (274) unstable; urgency=low
+
+  * Various build-fixes.
+
+ -- Thomas E. Dickey <dickey@invisible-island.net>  Sun, 28 Aug 2011 20:07:29 -0400
+
+xterm-dev (273) unstable; urgency=low
+
+  * Build-fixes/regressions from #272.
+
+ -- Thomas E. Dickey <dickey@invisible-island.net>  Thu, 25 Aug 2011 05:42:58 -0400
+
+xterm-dev (272) unstable; urgency=low
+
+  * Build-fix for termcap systems.
+
+ -- Thomas E. Dickey <dickey@invisible-island.net>  Fri, 15 Jul 2011 20:41:30 -0400
+
 xterm-dev (271) unstable; urgency=low
 
   * Ubuntu #756273 (accommodate function keys as popup-menu triggers)

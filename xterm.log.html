@@ -31,7 +31,7 @@
  * sale, use or other dealings in this Software without prior written        *
  * authorization.                                                            *
  *****************************************************************************
-  $XTermId: xterm.log.html,v 1.1063 2011/07/15 00:51:57 tom Exp $
+  $XTermId: xterm.log.html,v 1.1107 2011/10/11 00:55:31 tom Exp $
   -->
 <HTML>
 <HEAD>
@@ -41,7 +41,9 @@
 </HEAD>
 <BODY>
 <HR>
-Copyright &copy; 1997-2009,2010 by <A
+<a href=
+"http://invisible-island.net/">http://invisible-island.net/</a><a href="http://invisible-island.net/xterm/">xterm/</a><br>
+Copyright &copy; 1997-2010,2011 by <A
 HREF="mailto:dickey@invisible-island.net">Thomas E. Dickey</A>
 <HR>
 <H1>Contents</H1>
@@ -56,6 +58,11 @@ Most of these are summarized in the XFree86 CHANGELOG
 is the latest version of this file.
 
 <UL>
+<LI><A HREF="#xterm_276">Patch #276 - 2011/10/10</A>
+<LI><A HREF="#xterm_275">Patch #275 - 2011/09/11</A>
+<LI><A HREF="#xterm_274">Patch #274 - 2011/09/05</A>
+<LI><A HREF="#xterm_273">Patch #273 - 2011/08/25</A>
+<LI><A HREF="#xterm_272">Patch #272 - 2011/08/24</A>
 <LI><A HREF="#xterm_271">Patch #271 - 2011/07/14</A>
 <LI><A HREF="#xterm_270">Patch #270 - 2011/04/26</A>
 <LI><A HREF="#xterm_269">Patch #269 - 2011/02/19</A>
@@ -329,6 +336,179 @@ is the latest version of this file.
 <LI><A HREF="#xterm_02">Patch #2 - 1996/1/7</A>
 <LI><A HREF="#xterm_01">Patch #1 - 1996/1/6</A>
 </UL>
+
+<H1><A NAME="xterm_276">Patch #276 - 2011/10/10</A></H1>
+<ul>
+	<li>modify clipping limits for TrueType fonts to account for the
+	    <code>scaleHeight</code> resource setting, to work around another
+	    problem due to recent FreeType changes.  In this case, the
+	    <code>DejaVu Sans Mono</code> set to pixelsize=13.5
+	    is truncated because the font descent is reduced by FreeType to
+	    match an incorrect height metric (report by Adam Lee).
+
+	<li>improve recovery when bitmap fonts are not installed, e.g., so
+	    that switching font-sizes works for TrueType fonts.
+
+	<li>modify lookup for <code>XTERM_SHELL</code> feature to allow 
+	    relative pathnames.
+
+	<li>modify abbreviation disambiguation check
+	    for command-line parameters to account for <code>-geometry</code>,
+	    whose parameter may begin with "+" or "-"
+	    (report by Scott Bertilson).
+</ul>
+
+<H1><A NAME="xterm_275">Patch #275 - 2011/09/11</A></H1>
+<ul>
+	<li>add <code>ash</code>, <code>zsh</code> to known shells for
+	    <code>resize</code>.
+
+	<li>modify <code>resize</code>
+	    to reuse the logic from <code>xterm</code>
+	    which determines the actual logon-user's shell
+	    if <code>$SHELL</code> is not set.
+
+	<li>revert the <code>unsetenv("SHELL")</code> added in
+	    <a href="#xterm_272">patch #272</a>.
+
+	<li>an <code>unsetenv("SHELL")</code> added in
+	    <a href="#xterm_272">patch #272</a> to help ensure that
+	    <code>luit</code> would get the user's shell consistently
+	    did not work as expected for cases where multiple
+	    names are in the password-file for a given uid.
+	    That was because changes in <a href="#xterm_157">patch #157</a>
+	    to handle this situation
+	    did not take into account that repeated calls to
+	    <code>getpwnam</code> and <code>getpwuid</code>
+	    return a pointer to the same static buffer.
+	    Fixed the older logic to work as intended,
+	    by ensuring that the passwd-data from each call is stored
+	    separately (report by Paul Keusemann).
+
+	<li>adjust ifdef's for <code>putenv</code> and <code>unsetenv</code>
+	    in case only one of those is provided on a given platform.
+
+	<li>correct comparison used in <code>ExposeContains</code> macro from
+	    <a href="#xterm_274">patch #274</a>
+	    changes, to handle window-dragging (patch by Todd Eigenschink).
+</ul>
+
+<H1><A NAME="xterm_274">Patch #274 - 2011/09/05</A></H1>
+<ul>
+	<li>portability fixes for cygwin: do not define <code>SVR4</code>,
+	    and work around nonstandard header location.
+
+	<li>ifdef'd use of <code>unsetenv</code>
+	    from <a href="#xterm_273">patch #273</a>
+	    changes to work with Solaris 9
+	    (report by Waldemar Rachwal).
+
+	<li>modify logic for <code>XtAppPending</code> to merge adjacent
+	    <code>Expose</code> and <code>ConfigureNotify</code> events
+	    which are redundant (report by Edward McGuire).
+
+	<li>fix an unneeded warning message when <code>-r</code> option
+	    is given.
+
+	<li>remove a few redundant entries from table used for helping
+	    abbreviation-checking of command-line options, makes
+	    <code>-geom</code> work again after
+	    <a href="#xterm_272">patch #272</a> changes
+	    as an abbreviation of
+	    <code>-geometry</code>.
+
+	<li>add <code>scaleHeight</code> resource and
+	    command-line option <code>-sh</code>
+	    as workaround for some font-configurations broken by
+	    changes in FreeType 2.4.6 (report by Miroslav Hodak).
+
+	<li>portability fixes for some configure macros:
+	    <code>CF_FUNC_TGETENT</code>,
+	    <code>CF_XOPEN_SOURCE</code>,
+	    <code>CF_X_ATHENA_LIBS</code>.
+
+	<li>add configure option <code>--with-freetype-config</code> to
+	    improve selection over the plethora of configuration options
+	    which freetype has so far provided.
+
+	<li>build-fix for configure <code>--enable-load-vt-fonts</code> when
+	    <code>--enable-widec</code> is not specified.
+
+	<li>build-fixes for suppressing various features, needed after changes
+	    in patches 270, 271 and 272 (report by Brian Lindholm)
+</ul>
+
+<H1><A NAME="xterm_273">Patch #273 - 2011/08/25</A></H1>
+<ul>
+	<li>build-fix for out-of-tree "make docs" rule.
+
+	<li>correct a typo in <code>x_strdup</code>, from
+	    <a href="#xterm_198">patch #198</a>
+	    changes.
+
+	<li>correct initialization for <code>-e</code> option, broken in
+	    <a href="#xterm_272">patch #272</a>
+	    changes (report by Gabriele Balducci).
+
+	<li>build-fix for out-of-tree builds to address <code>minstall</code>
+	    script changes in
+	    <a href="#xterm_272">patch #272</a>
+	    (patch by Thierry Reding).
+</ul>
+
+<H1><A NAME="xterm_272">Patch #272 - 2011/08/24</A></H1>
+<ul>
+	<li>document limitation of <code>Gtk</code> in connection with xterm's
+	    <code>-into</code> option, in the manpage (Ubuntu #806969).
+
+	<li>improve <code>-into</code> by checking for and using the size
+	    of the window within which xterm is embedded, overriding other
+	    clues.
+
+	<li>modify logic for <code>localeFilter</code> resource to allow that
+	    to include command-line options of luit.
+
+	<li>improve <code>-into</code> by checking for invalid window-id,
+	    and allowing hexadecimal/decimal/octal values.
+
+	<li>improve <code>keepSelection</code>, adding the case where the
+	    highlighting is cleared,
+	    overlooked in <a href="#xterm_230">patch #230</a>
+	    (patch by Marco Peereboom).
+
+	<li>improve command-line parsing to make abbreviate options work
+	    consistently across xterm-specific versus standard X toolkit
+	    options, and report cases where an abbreviated option happens
+	    to be ambiguous.  In particular, <code>-d</code> now works as
+	    an abbreviation for <code>-display</code>.
+
+	<li>fix regression in command-line parsing introduced in
+	    <a href="#xterm_271">patch #271</a> changes
+	    for Debian #629358,
+	    (Debian #637910).
+
+	<li>split-out new termcap/terminfo building block
+	    <code>xterm+kbs</code> for configurability.
+
+	<li>modify <code>terminfo</code> file to reflect changes in ncurses
+	    for <code>xterm-16color</code> and <code>xterm-256color</code>.
+
+	<li>modify <code>minstall.sh</code>, etc., to reflect the default
+	    default class,
+	    <code>$TERM</code> and
+	    <code>decTerminalID</code> values.
+
+	<li>reword <code>resize</code> manpage to reflect the fact that
+	    <code>$TERMCAP</code> is not set on all systems (patch by
+	    Alan Coopersmith).
+
+	<li>work around combined Xaw6/Xaw7 package in DragonFlyBSD which
+	    omits the usual symbolic link to the preferred library name.
+
+	<li>further improve build-fix for termcap systems by checking for
+	    some which are only partial implementations, e.g., termcap
+	    2.08 in CentOS 5.2
+</ul>
 
 <H1><A NAME="xterm_271">Patch #271 - 2011/07/14</A></H1>
 <ul>

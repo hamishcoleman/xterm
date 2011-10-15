@@ -1,4 +1,4 @@
-/* $XTermId: menu.c,v 1.295 2011/07/12 10:45:36 tom Exp $ */
+/* $XTermId: menu.c,v 1.300 2011/10/09 14:14:23 tom Exp $ */
 
 /*
  * Copyright 1999-2010,2011 by Thomas E. Dickey
@@ -540,9 +540,11 @@ unusedEntries(XtermWidget xw, MenuIndex num)
     memset(result, 0, sizeof(result));
     switch (num) {
     case mainMenu:
+#if OPT_MAXIMIZE
 	if (resource.fullscreen > 1) {
 	    result[mainMenu_fullscreen] = True;
 	}
+#endif
 #if OPT_NUM_LOCK
 	if (!screen->alt_is_not_meta) {
 	    result[mainMenu_alt_esc] = True;
@@ -655,7 +657,7 @@ create_menu(Widget w, XtermWidget xw, MenuIndex num)
 	for (n = 0; n < nentries; ++n) {
 	    if (!unused[n]) {
 		cb[0].callback = (XtCallbackProc) entries[n].function;
-		cb[0].closure = (caddr_t) entries[n].name;
+		cb[0].closure = (XtPointer) entries[n].name;
 		entries[n].widget = XtCreateManagedWidget(entries[n].name,
 							  (entries[n].function
 							   ? smeBSBObjectClass
@@ -2564,6 +2566,19 @@ HandleFontLoading(Widget w,
 #endif
 
 #if OPT_RENDERFONT
+static void
+update_fontmenu(XtermWidget xw)
+{
+    TScreen *screen = TScreenOf(xw);
+    int n;
+
+    for (n = 0; n <= fontMenu_lastBuiltin; ++n) {
+	Boolean active = (Boolean) (xw->misc.render_font ||
+				    (screen->menu_font_sizes[n] >= 0));
+	SetItemSensitivity(fontMenuEntries[n].widget, active);
+    }
+}
+
 void
 HandleRenderFont(Widget w,
 		 XEvent * event GCC_UNUSED,
@@ -2576,6 +2591,8 @@ HandleRenderFont(Widget w,
 
     handle_vt_toggle(do_font_renderfont, xw->misc.render_font,
 		     params, *param_count, w);
+
+    update_fontmenu(xw);
 }
 #endif
 
@@ -3517,6 +3534,7 @@ update_font_renderfont(void)
 		   (term->misc.render_font == True));
     SetItemSensitivity(fontMenuEntries[fontMenu_render_font].widget,
 		       !IsEmpty(term->misc.face_name));
+    update_fontmenu(term);
 }
 #endif
 
@@ -3564,6 +3582,7 @@ update_font_utf8_title(void)
 }
 #endif
 
+#if OPT_DEC_CHRSET || OPT_BOX_CHARS || OPT_DEC_SOFTFONT
 void
 update_menu_allowBoldFonts(void)
 {
@@ -3572,6 +3591,7 @@ update_menu_allowBoldFonts(void)
 		   fontMenu_allowBoldFonts,
 		   TScreenOf(term)->allowBoldFonts);
 }
+#endif
 
 #if OPT_ALLOW_XXX_OPS
 static void
