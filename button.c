@@ -1,7 +1,7 @@
-/* $XTermId: button.c,v 1.430 2012/01/07 02:00:35 tom Exp $ */
+/* $XTermId: button.c,v 1.435 2012/11/20 01:15:57 tom Exp $ */
 
 /*
- * Copyright 1999-2010,2011 by Thomas E. Dickey
+ * Copyright 1999-2011,2012 by Thomas E. Dickey
  *
  *                         All Rights Reserved
  *
@@ -1819,14 +1819,25 @@ base64_flush(TScreen * screen)
 #endif /* OPT_PASTE64 */
 
 static void
-_qWriteSelectionData(TScreen * screen, Char * lag, unsigned length)
+_qWriteSelectionData(XtermWidget xw, Char * lag, unsigned length)
 {
+    TScreen *screen = TScreenOf(xw);
+
 #if OPT_PASTE64
     if (screen->base64_paste) {
 	/* Send data as base64 */
 	Char *p = lag;
 	Char buf[64];
 	unsigned x = 0;
+
+	/*
+	 * Handle the case where the selection is from _this_ xterm, which
+	 * puts part of the reply in the buffer before the selection callback
+	 * happens.
+	 */
+	if (screen->base64_paste && screen->unparse_len) {
+	    unparse_end(xw);
+	}
 	while (length--) {
 	    switch (screen->base64_count) {
 	    case 0:
@@ -1876,12 +1887,13 @@ _qWriteSelectionData(TScreen * screen, Char * lag, unsigned length)
 }
 
 static void
-_WriteSelectionData(TScreen * screen, Char * line, size_t length)
+_WriteSelectionData(XtermWidget xw, Char * line, size_t length)
 {
     /* Write data to pty a line at a time. */
     /* Doing this one line at a time may no longer be necessary
        because v_write has been re-written. */
 
+    TScreen *screen = TScreenOf(xw);
     Char *lag, *end;
 
     /* in the VMS version, if tt_pasting isn't set to True then qio
@@ -1897,7 +1909,7 @@ _WriteSelectionData(TScreen * screen, Char * line, size_t length)
 
 #if OPT_PASTE64
     if (screen->base64_paste) {
-	_qWriteSelectionData(screen, lag, (unsigned) (end - lag));
+	_qWriteSelectionData(xw, lag, (unsigned) (end - lag));
 	base64_flush(screen);
     } else
 #endif
@@ -1907,14 +1919,14 @@ _WriteSelectionData(TScreen * screen, Char * line, size_t length)
 	    for (cp = line; cp != end; cp++) {
 		if (*cp == '\n') {
 		    *cp = '\r';
-		    _qWriteSelectionData(screen, lag, (unsigned) (cp - lag + 1));
+		    _qWriteSelectionData(xw, lag, (unsigned) (cp - lag + 1));
 		    lag = cp + 1;
 		}
 	    }
 	}
 
 	if (lag != end) {
-	    _qWriteSelectionData(screen, lag, (unsigned) (end - lag));
+	    _qWriteSelectionData(xw, lag, (unsigned) (end - lag));
 	}
     }
 #ifdef VMS
@@ -2061,7 +2073,7 @@ SelectionReceived(Widget w,
 		    screen->internal_select = buffer;
 		}
 	    } else {
-		_WriteSelectionData(screen, (Char *) text_list[i], len);
+		_WriteSelectionData(xw, (Char *) text_list[i], len);
 	    }
 	}
 #if OPT_PASTE64
@@ -2597,14 +2609,14 @@ ScrollSelection(TScreen * screen, int amount, Bool always)
 
 	adjust = ROW2INX(screen, screen->startH.row);
 	if (always
-	    || !ScrnHaveLineMargins(screen)
-	    || ScrnIsLineInMargins(screen, adjust)) {
+	    || !ScrnHaveRowMargins(screen)
+	    || ScrnIsRowInMargins(screen, adjust)) {
 	    scroll_update_one(&screen->startH);
 	}
 	adjust = ROW2INX(screen, screen->endH.row);
 	if (always
-	    || !ScrnHaveLineMargins(screen)
-	    || ScrnIsLineInMargins(screen, adjust)) {
+	    || !ScrnHaveRowMargins(screen)
+	    || ScrnIsRowInMargins(screen, adjust)) {
 	    scroll_update_one(&screen->endH);
 	}
     }
@@ -2730,7 +2742,7 @@ static int charClass[256] =
 {
 /* NUL  SOH  STX  ETX  EOT  ENQ  ACK  BEL */
     32,  1,    1,   1,   1,   1,   1,   1,
-/*  BS   HT   NL   VT   NP   CR   SO   SI */
+/*  BS   HT   NL   VT   FF   CR   SO   SI */
      1,  32,   1,   1,   1,   1,   1,   1,
 /* DLE  DC1  DC2  DC3  DC4  NAK  SYN  ETB */
      1,   1,   1,   1,   1,   1,   1,   1,
@@ -4673,8 +4685,7 @@ formatVideoAttrs(XtermWidget xw, char *buffer, CELL * cell)
 		buffer += sprintf(buffer, "%s48;5", delim);
 		delim = ";";
 	    }
-	    buffer += sprintf(buffer, "%s%u", delim, bg);
-	    delim = ";";
+	    (void) sprintf(buffer, "%s%u", delim, bg);
 	}
 #endif
     }
