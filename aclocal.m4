@@ -1,8 +1,8 @@
-dnl $XTermId: aclocal.m4,v 1.355 2012/10/07 20:40:26 tom Exp $
+dnl $XTermId: aclocal.m4,v 1.360 2013/02/03 19:30:21 tom Exp $
 dnl
 dnl ---------------------------------------------------------------------------
 dnl
-dnl Copyright 1997-2011,2012 by Thomas E. Dickey
+dnl Copyright 1997-2012,2013 by Thomas E. Dickey
 dnl
 dnl                         All Rights Reserved
 dnl
@@ -72,31 +72,6 @@ ifdef([m4_version_compare],
 [CF_ACVERSION_COMPARE(
 AC_PREREQ_CANON(AC_PREREQ_SPLIT([$1])),
 AC_PREREQ_CANON(AC_PREREQ_SPLIT(AC_ACVERSION)), AC_ACVERSION, [$2], [$3])])])dnl
-dnl ---------------------------------------------------------------------------
-dnl CF_ACVERSION_CHECK version: 3 updated: 2012/10/03 18:39:53
-dnl ------------------
-dnl Conditionally generate script according to whether we're using a given autoconf.
-dnl
-dnl $1 = version to compare against
-dnl $2 = code to use if AC_ACVERSION is at least as high as $1.
-dnl $3 = code to use if AC_ACVERSION is older than $1.
-define([CF_ACVERSION_CHECK],
-[
-ifdef([m4_version_compare],
-[m4_if(m4_version_compare(m4_defn([AC_ACVERSION]), [$1]), -1, [$3], [$2])],
-[CF_ACVERSION_COMPARE(
-AC_PREREQ_CANON(AC_PREREQ_SPLIT([$1])),
-AC_PREREQ_CANON(AC_PREREQ_SPLIT(AC_ACVERSION)), AC_ACVERSION, [$2], [$3])])])dnl
-dnl ---------------------------------------------------------------------------
-dnl CF_ACVERSION_COMPARE version: 3 updated: 2012/10/03 18:39:53
-dnl --------------------
-dnl CF_ACVERSION_COMPARE(MAJOR1, MINOR1, TERNARY1,
-dnl                      MAJOR2, MINOR2, TERNARY2,
-dnl                      PRINTABLE2, not FOUND, FOUND)
-define([CF_ACVERSION_COMPARE],
-[ifelse(builtin([eval], [$2 < $5]), 1,
-[ifelse([$8], , ,[$8])],
-[ifelse([$9], , ,[$9])])])dnl
 dnl ---------------------------------------------------------------------------
 dnl CF_ACVERSION_COMPARE version: 3 updated: 2012/10/03 18:39:53
 dnl --------------------
@@ -498,6 +473,29 @@ AC_SUBST(ECHO_LD)
 AC_SUBST(RULE_CC)
 AC_SUBST(SHOW_CC)
 AC_SUBST(ECHO_CC)
+])dnl
+dnl ---------------------------------------------------------------------------
+dnl CF_DISABLE_LEAKS version: 7 updated: 2012/10/02 20:55:03
+dnl ----------------
+dnl Combine no-leak checks with the libraries or tools that are used for the
+dnl checks.
+AC_DEFUN([CF_DISABLE_LEAKS],[
+
+AC_REQUIRE([CF_WITH_DMALLOC])
+AC_REQUIRE([CF_WITH_DBMALLOC])
+AC_REQUIRE([CF_WITH_VALGRIND])
+
+AC_MSG_CHECKING(if you want to perform memory-leak testing)
+AC_ARG_ENABLE(leaks,
+	[  --disable-leaks         test: free permanent memory, analyze leaks],
+	[if test "x$enableval" = xno; then with_no_leaks=yes; else with_no_leaks=no; fi],
+	: ${with_no_leaks:=no})
+AC_MSG_RESULT($with_no_leaks)
+
+if test "$with_no_leaks" = yes ; then
+	AC_DEFINE(NO_LEAKS,1,[Define to 1 if you want to perform memory-leak testing.])
+	AC_DEFINE(YY_NO_LEAKS,1,[Define to 1 if you want to perform memory-leak testing.])
+fi
 ])dnl
 dnl ---------------------------------------------------------------------------
 dnl CF_DISABLE_RPATH_HACK version: 2 updated: 2011/02/13 13:31:33
@@ -933,7 +931,7 @@ rm -rf conftest*
 fi
 ])dnl
 dnl ---------------------------------------------------------------------------
-dnl CF_GCC_VERSION version: 6 updated: 2012/10/06 18:38:34
+dnl CF_GCC_VERSION version: 7 updated: 2012/10/18 06:46:33
 dnl --------------
 dnl Find version of gcc
 AC_DEFUN([CF_GCC_VERSION],[
@@ -941,7 +939,7 @@ AC_REQUIRE([AC_PROG_CC])
 GCC_VERSION=none
 if test "$GCC" = yes ; then
 	AC_MSG_CHECKING(version of $CC)
-	GCC_VERSION="`${CC} --version 2>/dev/null | sed -e '2,$d' -e 's/^.*(\(GCC\|Debian\)[[^)]]*) //' -e 's/^[[^0-9.]]*//' -e 's/[[^0-9.]].*//'`"
+	GCC_VERSION="`${CC} --version 2>/dev/null | sed -e '2,$d' -e 's/^.*(GCC[[^)]]*) //' -e 's/^.*(Debian[[^)]]*) //' -e 's/^[[^0-9.]]*//' -e 's/[[^0-9.]].*//'`"
 	test -z "$GCC_VERSION" && GCC_VERSION=unknown
 	AC_MSG_RESULT($GCC_VERSION)
 fi
@@ -1480,6 +1478,35 @@ AC_DEFUN([CF_MSG_LOG],[
 echo "${as_me:-configure}:__oline__: testing $* ..." 1>&AC_FD_CC
 ])dnl
 dnl ---------------------------------------------------------------------------
+dnl CF_NO_LEAKS_OPTION version: 5 updated: 2012/10/02 20:55:03
+dnl ------------------
+dnl see CF_WITH_NO_LEAKS
+AC_DEFUN([CF_NO_LEAKS_OPTION],[
+AC_MSG_CHECKING(if you want to use $1 for testing)
+AC_ARG_WITH($1,
+	[$2],
+	[AC_DEFINE_UNQUOTED($3,1,"Define to 1 if you want to use $1 for testing.")ifelse([$4],,[
+	 $4
+])
+	: ${with_cflags:=-g}
+	: ${with_no_leaks:=yes}
+	 with_$1=yes],
+	[with_$1=])
+AC_MSG_RESULT(${with_$1:-no})
+
+case .$with_cflags in #(vi
+.*-g*)
+	case .$CFLAGS in #(vi
+	.*-g*) #(vi
+		;;
+	*)
+		CF_ADD_CFLAGS([-g])
+		;;
+	esac
+	;;
+esac
+])dnl
+dnl ---------------------------------------------------------------------------
 dnl CF_PATHSEP version: 6 updated: 2012/09/29 18:38:12
 dnl ----------
 dnl Provide a value for the $PATH and similar separator (or amend the value
@@ -1791,6 +1818,25 @@ CF_ACVERSION_CHECK(2.52,
 	[AC_PROG_CC_STDC],
 	[CF_ANSI_CC_REQD])
 CF_CC_ENV_FLAGS 
+])dnl
+dnl ---------------------------------------------------------------------------
+dnl CF_PROG_GROFF version: 1 updated: 2013/01/02 20:37:18
+dnl -------------
+dnl Check if groff is available, for cases (such as html output) where nroff
+dnl is not enough.
+AC_DEFUN([CF_PROG_GROFF],[
+AC_PATH_PROG(GROFF_PATH,groff,no)
+if test "x$GROFF_PATH" = xno
+then
+	NROFF_NOTE=
+	GROFF_NOTE="#"
+else
+	NROFF_NOTE="#"
+	GROFF_NOTE=
+fi
+AC_SUBST(GROFF_PATH)
+AC_SUBST(GROFF_NOTE)
+AC_SUBST(NROFF_NOTE)
 ])dnl
 dnl ---------------------------------------------------------------------------
 dnl CF_REGEX version: 10 updated: 2012/10/04 20:12:20
@@ -2968,7 +3014,22 @@ fi
 AC_SUBST(no_appsdir)
 ])dnl
 dnl ---------------------------------------------------------------------------
-dnl CF_WITH_DESKTOP_CATEGORY version: 2 updated: 2011/07/02 10:22:07
+dnl CF_WITH_DBMALLOC version: 7 updated: 2010/06/21 17:26:47
+dnl ----------------
+dnl Configure-option for dbmalloc.  The optional parameter is used to override
+dnl the updating of $LIBS, e.g., to avoid conflict with subsequent tests.
+AC_DEFUN([CF_WITH_DBMALLOC],[
+CF_NO_LEAKS_OPTION(dbmalloc,
+	[  --with-dbmalloc         test: use Conor Cahill's dbmalloc library],
+	[USE_DBMALLOC])
+
+if test "$with_dbmalloc" = yes ; then
+	AC_CHECK_HEADER(dbmalloc.h,
+		[AC_CHECK_LIB(dbmalloc,[debug_malloc]ifelse([$1],,[],[,$1]))])
+fi
+])dnl
+dnl ---------------------------------------------------------------------------
+dnl CF_WITH_DESKTOP_CATEGORY version: 4 updated: 2013/01/01 10:50:14
 dnl ------------------------
 dnl Taking into account the absence of standardization of desktop categories
 dnl take a look to see whether other applications on the current system are
@@ -2978,7 +3039,9 @@ dnl $1 = program name
 dnl $2 = case-pattern to match comparable desktop files to obtain category
 dnl      This pattern may contain wildcards.
 dnl $3 = suggested categories, also a case-pattern but without wildcards,
-dnl      since it doubles as a default value.
+dnl      since it doubles as a default value for a shell case-statement.
+dnl $4 = categories to use if no match is found on the build-machine for the
+dnl      --with-desktop-category "auto" setting.
 dnl
 dnl The macro tells the configure script to substitute the $DESKTOP_CATEGORY
 dnl value.
@@ -3040,12 +3103,45 @@ then
 			done
 			cf_desktop_want=`cat conftest.2 | tr '\n' ';'`
 		fi
+		if test -n "$cf_desktop_want"
+		then
+			if test "$cf_desktop_want" = auto
+			then
+				cf_desktop_want=
+			else
+				# do a sanity check on the semicolon-separated list, ignore on failure
+				cf_desktop_test=`echo "$cf_desktop_want" | sed -e 's/[[^;]]//g'`
+				test -z "$cf_desktop_test" && cf_desktop_want=
+				cf_desktop_test=`echo "$cf_desktop_want" | sed -e 's/^.*;$/./g'`
+				test -z "$cf_desktop_test" && cf_desktop_want=
+			fi
+		fi
+		if test -z "$cf_desktop_want"
+		then
+			cf_desktop_want="ifelse([$4],,ifelse([$3],,[Application;],[`echo "$3" | sed -e 's/\*//g' -e 's/|/;/g' -e 's/[[;]]*$/;/g'`]),[$4])"
+			CF_VERBOSE(no usable value found for desktop category, using $cf_desktop_want)
+		fi
 	fi
 	DESKTOP_CATEGORY=`echo "$cf_desktop_want" | sed -e 's/[[ ,]]/;/g'`
-	CF_VERBOSE(resulting category=$DESKTOP_CATEGORY)
+	CF_VERBOSE(will use Categories=$DESKTOP_CATEGORY)
 	AC_SUBST(DESKTOP_CATEGORY)
 fi
 ])
+dnl ---------------------------------------------------------------------------
+dnl CF_WITH_DMALLOC version: 7 updated: 2010/06/21 17:26:47
+dnl ---------------
+dnl Configure-option for dmalloc.  The optional parameter is used to override
+dnl the updating of $LIBS, e.g., to avoid conflict with subsequent tests.
+AC_DEFUN([CF_WITH_DMALLOC],[
+CF_NO_LEAKS_OPTION(dmalloc,
+	[  --with-dmalloc          test: use Gray Watson's dmalloc library],
+	[USE_DMALLOC])
+
+if test "$with_dmalloc" = yes ; then
+	AC_CHECK_HEADER(dmalloc.h,
+		[AC_CHECK_LIB(dmalloc,[dmalloc_debug]ifelse([$1],,[],[,$1]))])
+fi
+])dnl
 dnl ---------------------------------------------------------------------------
 dnl CF_WITH_ICONDIR version: 5 updated: 2012/07/22 09:18:02
 dnl ---------------
@@ -3422,6 +3518,14 @@ else
 	EXTRA_INSTALL_DIRS="$EXTRA_INSTALL_DIRS \$(PIXMAPDIR)"
 fi
 AC_SUBST(no_pixmapdir)
+])dnl
+dnl ---------------------------------------------------------------------------
+dnl CF_WITH_VALGRIND version: 1 updated: 2006/12/14 18:00:21
+dnl ----------------
+AC_DEFUN([CF_WITH_VALGRIND],[
+CF_NO_LEAKS_OPTION(valgrind,
+	[  --with-valgrind         test: use valgrind],
+	[USE_VALGRIND])
 ])dnl
 dnl ---------------------------------------------------------------------------
 dnl CF_WITH_XPM version: 3 updated: 2012/10/04 06:57:36
