@@ -1,7 +1,7 @@
-# $XTermId: xterm.spec,v 1.44 2013/02/13 00:46:35 tom Exp $
+# $XTermId: xterm.spec,v 1.46 2013/03/26 23:10:40 tom Exp $
 Summary: X terminal emulator (development version)
 Name: xterm-dev
-Version: 290
+Version: 292
 Release: 1
 License: X11
 Group: User Interface/X
