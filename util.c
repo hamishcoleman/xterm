@@ -1,4 +1,4 @@
-/* $XTermId: util.c,v 1.604 2013/06/23 15:28:35 tom Exp $ */
+/* $XTermId: util.c,v 1.613 2013/09/10 11:03:58 tom Exp $ */
 
 /*
  * Copyright 1999-2012,2013 by Thomas E. Dickey
@@ -106,7 +106,7 @@ int (*my_wcwidth) (wchar_t);
  * that we should fill with blanks, return true if filling is needed.
  */
 int
-DamagedCells(TScreen * screen, unsigned n, int *klp, int *krp, int row, int col)
+DamagedCells(TScreen *screen, unsigned n, int *klp, int *krp, int row, int col)
 {
     LineData *ld = getLineData(screen, row);
     int result = False;
@@ -159,7 +159,7 @@ DamagedCells(TScreen * screen, unsigned n, int *klp, int *krp, int row, int col)
 }
 
 int
-DamagedCurCells(TScreen * screen, unsigned n, int *klp, int *krp)
+DamagedCurCells(TScreen *screen, unsigned n, int *klp, int *krp)
 {
     return DamagedCells(screen, n, klp, krp, screen->cur_row, screen->cur_col);
 }
@@ -1016,7 +1016,7 @@ resetZIconBeep(XtermWidget xw)
  * the current cursor position.  update cursor position.
  */
 void
-WriteText(XtermWidget xw, IChar * str, Cardinal len)
+WriteText(XtermWidget xw, IChar *str, Cardinal len)
 {
     TScreen *screen = TScreenOf(xw);
     LineData *ld = 0;
@@ -1031,7 +1031,7 @@ WriteText(XtermWidget xw, IChar * str, Cardinal len)
 	   screen->topline,
 	   screen->cur_row,
 	   screen->cur_col,
-	   len, visibleIChar(str, len)));
+	   len, visibleIChars(str, len)));
 
     if (cells + (unsigned) screen->cur_col > (unsigned) MaxCols(screen)) {
 	cells = (unsigned) (MaxCols(screen) - screen->cur_col);
@@ -1489,7 +1489,11 @@ ClearAbove(XtermWidget xw)
 	    if ((height = screen->cur_row + top) > screen->max_row)
 		height = screen->max_row + 1;
 	    if ((height -= top) > 0) {
-		erase_displayed_graphics(screen, 0, top, MaxCols(screen), height);
+		chararea_clear_displayed_graphics(screen,
+						  0,
+						  top,
+						  MaxCols(screen),
+						  height);
 
 		ClearCurBackground(xw,
 				   top,
@@ -1529,11 +1533,11 @@ ClearBelow(XtermWidget xw)
 	    if (screen->scroll_amt)
 		FlushScroll(xw);
 	    if (++top <= screen->max_row) {
-		erase_displayed_graphics(screen,
-					 0,
-					 top,
-					 MaxCols(screen),
-					 (screen->max_row - top + 1));
+		chararea_clear_displayed_graphics(screen,
+						  0,
+						  top,
+						  MaxCols(screen),
+						  (screen->max_row - top + 1));
 		ClearCurBackground(xw,
 				   top,
 				   0,
@@ -1760,11 +1764,11 @@ ClearScreen(XtermWidget xw)
     if ((top = INX2ROW(screen, 0)) <= screen->max_row) {
 	if (screen->scroll_amt)
 	    FlushScroll(xw);
-	erase_displayed_graphics(screen,
-				 0,
-				 top,
-				 MaxCols(screen),
-				 (screen->max_row - top + 1));
+	chararea_clear_displayed_graphics(screen,
+					  0,
+					  top,
+					  MaxCols(screen),
+					  (screen->max_row - top + 1));
 	ClearCurBackground(xw,
 			   top,
 			   0,
@@ -2045,14 +2049,18 @@ vertical_copy_area(XtermWidget xw,
 {
     TScreen *screen = TScreenOf(xw);
 
+    TRACE(("vertical_copy_area - firstline=%d nlines=%d left=%d right=%d amount=%d\n",
+	   firstline, nlines, left, right, amount));
+
     if (nlines > 0) {
 	int src_x = CursorX(screen, left);
 	int src_y = firstline * FontHeight(screen) + screen->border;
+	unsigned int w = (unsigned) ((right + 1 - left) * FontWidth(screen));
+	unsigned int h = (unsigned) (nlines * FontHeight(screen));
+	int dst_x = src_x;
+	int dst_y = src_y - amount * FontHeight(screen);
 
-	copy_area(xw, src_x, src_y,
-		  (unsigned) ((right + 1 - left) * FontWidth(screen)),
-		  (unsigned) (nlines * FontHeight(screen)),
-		  src_x, src_y - amount * FontHeight(screen));
+	copy_area(xw, src_x, src_y, w, h, dst_x, dst_y);
 
 	if (screen->show_wrap_marks) {
 	    LineData *ld;
@@ -2403,13 +2411,13 @@ xtermRepaint(XtermWidget xw)
 Boolean
 isDefaultForeground(const char *name)
 {
-    return (Boolean) ! x_strcasecmp(name, XtDefaultForeground);
+    return (Boolean) !x_strcasecmp(name, XtDefaultForeground);
 }
 
 Boolean
 isDefaultBackground(const char *name)
 {
-    return (Boolean) ! x_strcasecmp(name, XtDefaultBackground);
+    return (Boolean) !x_strcasecmp(name, XtDefaultBackground);
 }
 
 #if OPT_WIDE_CHARS
@@ -2556,7 +2564,7 @@ ReverseVideo(XtermWidget xw)
     swapVTwinGCs(xw, &(screen->iconVwin));
 #endif /* NO_ACTIVE_ICON */
 
-    xw->misc.re_verse = (Boolean) ! xw->misc.re_verse;
+    xw->misc.re_verse = (Boolean) !xw->misc.re_verse;
 
     if (XtIsRealized((Widget) xw)) {
 	xtermDisplayCursor(xw);
@@ -2597,7 +2605,7 @@ ReverseVideo(XtermWidget xw)
 }
 
 void
-recolor_cursor(TScreen * screen,
+recolor_cursor(TScreen *screen,
 	       Cursor cursor,	/* X cursor ID to set */
 	       unsigned long fg,	/* pixel indexes to look up */
 	       unsigned long bg)	/* pixel indexes to look up */
@@ -2704,7 +2712,7 @@ xtermXftDrawString(XtermWidget xw,
 		   XftFont * font,
 		   int x,
 		   int y,
-		   IChar * text,
+		   IChar *text,
 		   Cardinal len,
 		   Bool really)
 {
@@ -2988,7 +2996,7 @@ xtermFillCells(XtermWidget xw,
 
 #if OPT_TRACE
 static void
-xtermSetClipRectangles(Display * dpy,
+xtermSetClipRectangles(Display *dpy,
 		       GC gc,
 		       int x,
 		       int y,
@@ -3077,7 +3085,7 @@ drawClippedXftString(XtermWidget xw,
 		     XftColor * fg_color,
 		     int x,
 		     int y,
-		     IChar * text,
+		     IChar *text,
 		     Cardinal len)
 {
     int ncells = xtermXftWidth(xw, flags,
@@ -3119,7 +3127,7 @@ drawXtermText(XtermWidget xw,
 	      int start_x,
 	      int start_y,
 	      int chrset,
-	      IChar * text,
+	      IChar *text,
 	      Cardinal len,
 	      int on_wide)
 {
@@ -3131,6 +3139,7 @@ drawXtermText(XtermWidget xw,
        the X font, and the width of the default font) */
     int font_width = ((flags & DOUBLEWFONT) ? 2 : 1) * screen->fnt_wide;
     Bool did_ul = False;
+    XTermFonts *curFont;
 
 #if OPT_WIDE_CHARS
     if (text == 0)
@@ -3170,7 +3179,7 @@ drawXtermText(XtermWidget xw,
 		rect.width = (unsigned short) ((int) len * font_width);
 		rect.height = (unsigned short) (FontHeight(screen));
 
-		TRACE(("drawing %s\n", visibleChrsetName((unsigned) chrset)));
+		TRACE(("drawing %s\n", visibleDblChrset((unsigned) chrset)));
 		switch (chrset) {
 		case CSET_DHL_TOP:
 		    rect.y = (short) -(fs->ascent / 2);
@@ -3337,11 +3346,16 @@ drawXtermText(XtermWidget xw,
 		     */
 		    if_OPT_WIDE_CHARS(screen, {
 			unsigned part = ucs2dec(ch);
-			if (xtermIsDecGraphic(part) &&
-			    (screen->force_box_chars
-			     || xtermXftMissing(xw, font, ch))) {
+			if (xtermIsDecGraphic(part)) {
+			    if (screen->force_box_chars
+				|| xtermXftMissing(xw, font, ch)) {
+				ch = part;
+				missing = True;
+			    }
+			} else if (xtermXftMissing(xw, font, ch)
+				   && (part = AsciiEquivs(ch)) != ch) {
 			    ch = part;
-			    missing = True;
+			    replace = True;
 			}
 		    });
 		}
@@ -3444,6 +3458,9 @@ drawXtermText(XtermWidget xw,
 	return x;
     }
 #endif /* OPT_RENDERFONT */
+    curFont = ((flags & BOLDATTR(screen))
+	       ? WhichVFontData(screen, fnts[fBold])
+	       : WhichVFontData(screen, fnts[fNorm]));
     /*
      * If we're asked to display a proportional font, do this with a fixed
      * pitch.  Yes, it's ugly.  But we cannot distinguish the use of xterm
@@ -3452,9 +3469,6 @@ drawXtermText(XtermWidget xw,
      */
     if (!IsIcon(screen) && !(flags & CHARBYCHAR) && screen->fnt_prop) {
 	int adj, width;
-	XTermFonts *font = ((flags & BOLDATTR(screen))
-			    ? WhichVFontData(screen, fnts[fBold])
-			    : WhichVFontData(screen, fnts[fNorm]));
 
 	while (len--) {
 	    int cells = WideCells(*text);
@@ -3465,7 +3479,7 @@ drawXtermText(XtermWidget xw,
 		continue;
 	    } else
 #endif
-	    if (IsXtermMissingChar(screen, *text, font)) {
+	    if (IsXtermMissingChar(screen, *text, curFont)) {
 		adj = 0;
 	    } else
 #endif
@@ -3474,12 +3488,12 @@ drawXtermText(XtermWidget xw,
 		    XChar2b temp[1];
 		    temp[0].byte2 = LO_BYTE(*text);
 		    temp[0].byte1 = HI_BYTE(*text);
-		    width = XTextWidth16(font->fs, temp, 1);
+		    width = XTextWidth16(curFont->fs, temp, 1);
 		}
 		, {
 		    char temp[1];
 		    temp[0] = (char) LO_BYTE(*text);
-		    width = XTextWidth(font->fs, temp, 1);
+		    width = XTextWidth(curFont->fs, temp, 1);
 		});
 		adj = (FontWidth(screen) - width) / 2;
 		if (adj < 0)
@@ -3495,17 +3509,27 @@ drawXtermText(XtermWidget xw,
 	return x;
     }
 #if OPT_BOX_CHARS
-    /* If the font is incomplete, draw some substitutions */
+    /*
+     * Draw some substitutions, if needed.  The font may not include the
+     * line-drawing set, or it may be incomplete (in which case we'll draw an
+     * empty space via xtermDrawBoxChar), or we may be told to force our
+     * line-drawing.
+     *
+     * The empty space is a special case which can be overridden with the
+     * showMissingGlyphs resource to produce an outline.  That is preferable
+     * to the haphazard treatment of fonts in "modern" (sic) X, which may
+     * use a thick outline or something like the replacement character.  If
+     * you really want that, you can set assumeAllChars.
+     */
     if (!IsIcon(screen)
 	&& !(flags & NOTRANSLATION)
-	&& (!screen->fnt_boxes || screen->force_box_chars)) {
+	&& (!screen->fnt_boxes
+	    || (FontIsIncomplete(curFont) && !screen->assume_all_chars)
+	    || screen->force_box_chars)) {
 	/* Fill in missing box-characters.
 	   Find regions without missing characters, and draw
 	   them calling ourselves recursively.  Draw missing
 	   characters via xtermDrawBoxChar(). */
-	XTermFonts *font = ((flags & BOLDATTR(screen))
-			    ? WhichVFontData(screen, fnts[fBold])
-			    : WhichVFontData(screen, fnts[fNorm]));
 	int last, first = 0;
 	Bool drewBoxes = False;
 
@@ -3532,9 +3556,9 @@ drawXtermText(XtermWidget xw,
 				   ((on_wide || ch_width > 1)
 				    && okFont(NormalWFont(screen)))
 				   ? WhichVFontData(screen, fnts[fWide])
-				   : font);
+				   : curFont);
 #else
-	    isMissing = IsXtermMissingChar(screen, ch, font);
+	    isMissing = IsXtermMissingChar(screen, ch, curFont);
 	    ch_width = 1;
 #endif
 	    /*
@@ -3546,11 +3570,14 @@ drawXtermText(XtermWidget xw,
 	     */
 	    if_OPT_WIDE_CHARS(screen, {
 		if (!isMissing
-		    && ch > 255
-		    && ucs2dec(ch) < 32
 		    && TScreenOf(xw)->force_box_chars) {
-		    ch = ucs2dec(ch);
-		    isMissing = True;
+		    if (ch > 255
+			&& ucs2dec(ch) < 32) {
+			ch = ucs2dec(ch);
+			isMissing = True;
+		    } else if (ch < 32) {
+			isMissing = True;
+		    }
 		}
 	    });
 
@@ -3685,7 +3712,7 @@ drawXtermText(XtermWidget xw,
 	 * show the actual characters.
 	 */
 	useBoldFont = ((flags & BOLDATTR(screen)) != 0);
-	if ((flags & BOLDATTR(screen)) != 0) {
+	if (useBoldFont) {
 	    XTermFonts *norm = 0;
 	    XTermFonts *bold = 0;
 	    Bool noBold, noNorm;
@@ -3730,18 +3757,15 @@ drawXtermText(XtermWidget xw,
 	    Pixel fg = getCgsFore(xw, currentWin, gc);
 	    Pixel bg = getCgsBack(xw, currentWin, gc);
 
-	    if (needWide && okFont(BoldWFont(screen))) {
-		if ((flags & BOLDATTR(screen)) != 0
-		    && okFont(BoldWFont(screen))) {
-		    fntId = fWBold;
-		    cgsId = gcWBold;
-		} else {
-		    fntId = fWide;
-		    cgsId = gcWide;
-		}
-	    } else if ((flags & BOLDATTR(screen)) != 0
-		       && okFont(BoldFont(screen))
-		       && useBoldFont) {
+	    if (needWide
+		&& useBoldFont
+		&& okFont(BoldWFont(screen))) {
+		fntId = fWBold;
+		cgsId = gcWBold;
+	    } else if (needWide) {
+		fntId = fWide;
+		cgsId = gcWide;
+	    } else if (useBoldFont) {
 		fntId = fBold;
 		cgsId = gcBold;
 	    } else {
@@ -4135,7 +4159,7 @@ ClearCurBackground(XtermWidget xw,
  * Returns a single base character for the given cell.
  */
 unsigned
-getXtermCell(TScreen * screen, int row, int col)
+getXtermCell(TScreen *screen, int row, int col)
 {
     LineData *ld = getLineData(screen, row);
 
@@ -4148,7 +4172,7 @@ getXtermCell(TScreen * screen, int row, int col)
  * Sets a single base character for the given cell.
  */
 void
-putXtermCell(TScreen * screen, int row, int col, int ch)
+putXtermCell(TScreen *screen, int row, int col, int ch)
 {
     LineData *ld = getLineData(screen, row);
 
@@ -4168,7 +4192,7 @@ putXtermCell(TScreen * screen, int row, int col, int ch)
  * Add a combining character for the given cell
  */
 void
-addXtermCombining(TScreen * screen, int row, int col, unsigned ch)
+addXtermCombining(TScreen *screen, int row, int col, unsigned ch)
 {
     if (ch != 0) {
 	LineData *ld = getLineData(screen, row);
@@ -4187,7 +4211,7 @@ addXtermCombining(TScreen * screen, int row, int col, unsigned ch)
 }
 
 unsigned
-getXtermCombining(TScreen * screen, int row, int col, int off)
+getXtermCombining(TScreen *screen, int row, int col, int off)
 {
     LineData *ld = getLineData(screen, row);
     return ld->combData[off][col];
