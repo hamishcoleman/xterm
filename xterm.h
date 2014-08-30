@@ -1,4 +1,4 @@
-/* $XTermId: xterm.h,v 1.742 2014/06/12 23:41:47 tom Exp $ */
+/* $XTermId: xterm.h,v 1.745 2014/07/24 22:47:09 tom Exp $ */
 
 /*
  * Copyright 1999-2013,2014 by Thomas E. Dickey
@@ -99,7 +99,7 @@
 #define HAVE_PUTENV 1
 #endif
 
-#if defined(CSRG_BASED) || defined(__GNU__)
+#if defined(CSRG_BASED) || defined(__GNU__) || defined(__minix)
 #define USE_POSIX_TERMIOS 1
 #endif
 
@@ -134,7 +134,7 @@
 #define HAVE_TCGETATTR 1
 #endif
 
-#if defined(__SCO__) || defined(__UNIXWARE__)
+#if defined(__SCO__) || defined(__UNIXWARE__) || defined(__minix)
 #define USE_TERMCAP 1
 #endif
 
@@ -419,7 +419,7 @@ extern char **environ;
 #define XtNcursorColor		"cursorColor"
 #define XtNcursorOffTime	"cursorOffTime"
 #define XtNcursorOnTime		"cursorOnTime"
-#define XtNcursorUnderline	"cursorUnderLine"
+#define XtNcursorUnderLine	"cursorUnderLine"
 #define XtNcutNewline		"cutNewline"
 #define XtNcutToBeginningOfLine	"cutToBeginningOfLine"
 #define XtNdecTerminalID	"decTerminalID"
@@ -604,7 +604,7 @@ extern char **environ;
 #define XtCCursorBlink		"CursorBlink"
 #define XtCCursorOffTime	"CursorOffTime"
 #define XtCCursorOnTime		"CursorOnTime"
-#define XtCCursorUnderline	"CursorUnderLine"
+#define XtCCursorUnderLine	"CursorUnderLine"
 #define XtCCutNewline		"CutNewline"
 #define XtCCutToBeginningOfLine	"CutToBeginningOfLine"
 #define XtCDecTerminalID	"DecTerminalID"

@@ -1,4 +1,4 @@
-/* $XTermId: main.c,v 1.758 2014/05/26 00:01:25 tom Exp $ */
+/* $XTermId: main.c,v 1.762 2014/07/24 22:47:09 tom Exp $ */
 
 /*
  * Copyright 2002-2013,2014 by Thomas E. Dickey
@@ -102,6 +102,8 @@
 #include <X11/Xaw/Form.h>
 #elif defined(HAVE_LIB_XAW3D)
 #include <X11/Xaw3d/Form.h>
+#elif defined(HAVE_LIB_XAW3DXFT)
+#include <X11/Xaw3dxft/Form.h>
 #elif defined(HAVE_LIB_NEXTAW)
 #include <X11/neXtaw/Form.h>
 #elif defined(HAVE_LIB_XAWPLUS)
@@ -2507,7 +2509,7 @@ main(int argc, char *argv[]ENVP_ARG)
     }
 #endif
 #endif
-#if defined(USE_ANY_SYSV_TERMIO) || defined(__MVS__)
+#if defined(USE_ANY_SYSV_TERMIO) || defined(__MVS__) || defined(__minix)
     if (0 > (mode = fcntl(screen->respond, F_GETFL, 0)))
 	SysError(ERROR_F_GETFL);
 #ifdef O_NDELAY
@@ -2550,7 +2552,9 @@ main(int argc, char *argv[]ENVP_ARG)
     });
     XSetErrorHandler(xerror);
     XSetIOErrorHandler(xioerror);
+#if OPT_SESSION_MGT
     IceSetIOErrorHandler(ice_error);
+#endif
 
     initPtyData(&VTbuffer);
 #ifdef ALLOWLOGGING
@@ -5366,5 +5370,19 @@ qsetlogin(char *login, char *ttyname)
     Send(1, &ps, &rps, sizeof(ps), sizeof(rps));
 
     return (rps.status);
+}
+#endif
+
+#ifdef __minix
+int
+setpgrp(void)
+{
+    return 0;
+}
+
+void
+_longjmp(jmp_buf _env, int _val)
+{
+    longjmp(_env, _val);
 }
 #endif
