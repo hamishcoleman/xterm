@@ -1,7 +1,7 @@
-/* $XTermId: menu.c,v 1.350 2017/12/29 20:54:09 tom Exp $ */
+/* $XTermId: menu.c,v 1.352 2018/04/15 19:45:01 tom Exp $ */
 
 /*
- * Copyright 1999-2016,2017 by Thomas E. Dickey
+ * Copyright 1999-2017,2018 by Thomas E. Dickey
  *
  *                         All Rights Reserved
  *
@@ -30,7 +30,7 @@
  * authorization.
  *
  *
- * Copyright 1989  The Open Group
+ * Copyright 1989  X Consortium
  *
  * Permission to use, copy, modify, distribute, and sell this software and its
  * documentation for any purpose is hereby granted without fee, provided that
@@ -48,9 +48,9 @@
  * AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  *
- * Except as contained in this notice, the name of The Open Group shall not be
+ * Except as contained in this notice, the name of the X Consortium shall not be
  * used in advertising or otherwise to promote the sale, use or other dealings
- * in this Software without prior written authorization from The Open Group.
+ * in this Software without prior written authorization from the X Consortium.
  */
 
 #include <xterm.h>
@@ -3724,11 +3724,13 @@ update_font_renderfont(void)
     SetItemSensitivity(fontMenuEntries[fontMenu_render_font].widget,
 		       !IsEmpty(CurrentXftFont(term)));
 
+#if OPT_BOX_CHARS
     if (term->work.render_font) {
 	TScreenOf(term)->broken_box_chars = term->work.broken_box_chars;
     } else {
 	TScreenOf(term)->broken_box_chars = False;
     }
+#endif
     update_font_boxchars();
 
     update_fontmenu(term);

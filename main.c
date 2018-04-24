@@ -1,7 +1,7 @@
-/* $XTermId: main.c,v 1.809 2017/12/20 01:17:24 tom Exp $ */
+/* $XTermId: main.c,v 1.811 2018/02/08 10:14:29 tom Exp $ */
 
 /*
- * Copyright 2002-2016,2017 by Thomas E. Dickey
+ * Copyright 2002-2017,2018 by Thomas E. Dickey
  *
  *                         All Rights Reserved
  *
@@ -29,7 +29,7 @@
  * sale, use or other dealings in this Software without prior written
  * authorization.
  *
- * Copyright 1987, 1988  The Open Group
+ * Copyright 1987, 1988  X Consortium
  *
  * Permission to use, copy, modify, distribute, and sell this software and its
  * documentation for any purpose is hereby granted without fee, provided that
@@ -47,9 +47,9 @@
  * AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  *
- * Except as contained in this notice, the name of The Open Group shall not be
+ * Except as contained in this notice, the name of the X Consortium shall not be
  * used in advertising or otherwise to promote the sale, use or other dealings
- * in this Software without prior written authorization from The Open Group.
+ * in this Software without prior written authorization from the X Consortium.
  *
  * Copyright 1987, 1988 by Digital Equipment Corporation, Maynard.
  *
@@ -3358,6 +3358,29 @@ find_utmp(struct UTMP_STR *tofind)
 #define USE_NO_DEV_TTY 0
 #endif
 
+#if defined(HAVE_GETUSERSHELL) && defined(HAVE_ENDUSERSHELL)
+static Boolean
+validShell(const char *pathname)
+{
+    Boolean result = False;
+
+    if (validProgram(pathname)) {
+	char *q;
+
+	while ((q = getusershell()) != 0) {
+	    TRACE(("...test \"%s\"\n", q));
+	    if (!strcmp(q, pathname)) {
+		result = True;
+		break;
+	    }
+	}
+	endusershell();
+    }
+
+    TRACE(("validShell %s ->%d\n", NonNull(pathname), result));
+    return result;
+}
+#else
 static int
 same_leaf(char *a, char *b)
 {
@@ -3422,6 +3445,8 @@ validShell(const char *pathname)
 			    result = True;
 			}
 			free(r);
+			if (result)
+			    break;
 		    }
 		    p = 0;
 		}
@@ -3433,6 +3458,7 @@ validShell(const char *pathname)
     TRACE(("validShell %s ->%d\n", NonNull(pathname), result));
     return result;
 }
+#endif
 
 static char *
 resetShell(char *oldPath)

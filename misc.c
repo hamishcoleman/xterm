@@ -1,7 +1,7 @@
-/* $XTermId: misc.c,v 1.785 2017/12/26 11:42:24 tom Exp $ */
+/* $XTermId: misc.c,v 1.787 2018/04/04 20:37:03 tom Exp $ */
 
 /*
- * Copyright 1999-2016,2017 by Thomas E. Dickey
+ * Copyright 1999-2017,2018 by Thomas E. Dickey
  *
  *                         All Rights Reserved
  *
@@ -4775,6 +4775,7 @@ do_dec_rqm(XtermWidget xw, int nparams, int *params)
 	}
 	reply.a_param[count++] = (ParmType) params[0];
 	reply.a_param[count++] = (ParmType) result;
+	TRACE(("DECRPM(%d) = %d\n", params[0], result));
     }
     reply.a_type = ANSI_CSI;
     reply.a_pintro = '?';

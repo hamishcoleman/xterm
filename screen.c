@@ -1,7 +1,7 @@
-/* $XTermId: screen.c,v 1.521 2017/12/19 23:48:26 tom Exp $ */
+/* $XTermId: screen.c,v 1.527 2018/04/09 09:03:17 tom Exp $ */
 
 /*
- * Copyright 1999-2015,2017 by Thomas E. Dickey
+ * Copyright 1999-2017,2018 by Thomas E. Dickey
  *
  *                         All Rights Reserved
  *
@@ -1121,9 +1121,6 @@ ScrnInsertLine(XtermWidget xw, ScrnBuf sb, int last, int where, unsigned n)
     TRACE(("ScrnInsertLine(last %d, where %d, n %d, size %d)\n",
 	   last, where, n, size));
 
-    if ((int) n > last)
-	n = (unsigned) last;
-
     assert(where >= 0);
     assert(last >= where);
 
@@ -1132,6 +1129,10 @@ ScrnInsertLine(XtermWidget xw, ScrnBuf sb, int last, int where, unsigned n)
 
     /* save n lines at bottom */
     ScrnClearLines(xw, sb, (last -= (int) n - 1), n, size);
+    if (last < 0) {
+	TRACE(("...remainder of screen is blank\n"));
+	return;
+    }
 
     /*
      * WARNING, overlapping copy operation.  Move down lines (pointers).
@@ -2731,7 +2732,9 @@ xtermCheckRect(XtermWidget xw,
 	    int right = (target.right - 1);
 
 	    ld = getLineData(screen, row);
-	    for (col = left; col <= right; ++col) {
+	    if (ld == 0)
+		continue;
+	    for (col = left; col <= right && col < ld->lineSize; ++col) {
 		if (ld->attribs[col] & CHARDRAWN) {
 		    *result += (int) ld->charData[col];
 		    if_OPT_WIDE_CHARS(screen, {
@@ -2823,6 +2826,19 @@ set_ewmh_hint(Display *dpy, Window window, int operation, _Xconst char *prop)
     Atom atom_fullscreen = XInternAtom(dpy, prop, False);
     Atom atom_state = XInternAtom(dpy, "_NET_WM_STATE", False);
 
+#if OPT_TRACE
+    const char *what = "?";
+    switch (operation) {
+    case _NET_WM_STATE_ADD:
+	what = "adding";
+	break;
+    case _NET_WM_STATE_REMOVE:
+	what = "removing";
+	break;
+    }
+    TRACE(("set_ewmh_hint %s %s\n", what, prop));
+#endif
+
     memset(&e, 0, sizeof(e));
     e.xclient.type = ClientMessage;
     e.xclient.message_type = atom_state;
@@ -2882,6 +2898,15 @@ probe_netwm(Display *dpy, _Xconst char *propname)
 	}
 	ldata = (long *) (void *) args;
 	for (i = 0; i < nitems; i++) {
+#if OPT_TRACE > 1
+	    char *name;
+	    if ((name = XGetAtomName(dpy, ldata[i])) != 0) {
+		TRACE(("atom[%d] = %s\n", i, name));
+		XFree(name);
+	    } else {
+		TRACE(("atom[%d] = ?\n", i));
+	    }
+#endif
 	    if ((Atom) ldata[i] == atom_fullscreen) {
 		has_capability = True;
 		break;
@@ -2914,8 +2939,9 @@ FullScreen(XtermWidget xw, int new_ewmh_mode)
 {
     TScreen *screen = TScreenOf(xw);
     Display *dpy = screen->display;
-    _Xconst char *oldprop = ewmhProperty(xw->work.ewmh[0].mode);
-    _Xconst char *newprop = ewmhProperty(new_ewmh_mode);
+    int old_ewmh_mode;
+    _Xconst char *oldprop;
+    _Xconst char *newprop;
 
     int which = 0;
     Window window;
@@ -2928,9 +2954,18 @@ FullScreen(XtermWidget xw, int new_ewmh_mode)
 #endif
 	window = VShellWindow(xw);
 
-    TRACE(("FullScreen %d:%s\n", new_ewmh_mode, BtoS(new_ewmh_mode)));
+    old_ewmh_mode = xw->work.ewmh[which].mode;
+    oldprop = ewmhProperty(old_ewmh_mode);
+    newprop = ewmhProperty(new_ewmh_mode);
 
-    if (new_ewmh_mode < 0 || new_ewmh_mode >= MAX_EWMH_MODE) {
+    TRACE(("FullScreen %d:%s -> %d:%s\n",
+	   old_ewmh_mode, NonNull(oldprop),
+	   new_ewmh_mode, NonNull(newprop)));
+
+    if (new_ewmh_mode == old_ewmh_mode) {
+	TRACE(("...unchanged\n"));
+	return;
+    } else if (new_ewmh_mode < 0 || new_ewmh_mode > MAX_EWMH_MODE) {
 	TRACE(("BUG: FullScreen %d\n", new_ewmh_mode));
 	return;
     } else if (new_ewmh_mode == 0) {
@@ -2945,6 +2980,7 @@ FullScreen(XtermWidget xw, int new_ewmh_mode)
     }
 
     if (xw->work.ewmh[which].allowed[new_ewmh_mode]) {
+	TRACE(("...new EWMH mode is allowed\n"));
 	if (new_ewmh_mode && !xw->work.ewmh[which].mode) {
 	    unset_resize_increments(xw);
 	    set_ewmh_hint(dpy, window, _NET_WM_STATE_ADD, newprop);

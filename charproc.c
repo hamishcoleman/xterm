@@ -1,7 +1,7 @@
-/* $XTermId: charproc.c,v 1.1517 2017/12/28 18:43:58 tom Exp $ */
+/* $XTermId: charproc.c,v 1.1529 2018/04/12 00:56:35 tom Exp $ */
 
 /*
- * Copyright 1999-2016,2017 by Thomas E. Dickey
+ * Copyright 1999-2017,2018 by Thomas E. Dickey
  *
  *                         All Rights Reserved
  *
@@ -30,7 +30,7 @@
  * authorization.
  *
  *
- * Copyright 1988  The Open Group
+ * Copyright 1988  X Consortium
  *
  * Permission to use, copy, modify, distribute, and sell this software and its
  * documentation for any purpose is hereby granted without fee, provided that
@@ -48,9 +48,9 @@
  * AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  *
- * Except as contained in this notice, the name of The Open Group shall not be
+ * Except as contained in this notice, the name of the X Consortium shall not be
  * used in advertising or otherwise to promote the sale, use or other dealings
- * in this Software without prior written authorization from The Open Group.
+ * in this Software without prior written authorization from the X Consortium.
  *
  */
 /*
@@ -1177,6 +1177,8 @@ modified_DECNRCM(XtermWidget xw)
 	switchPtyData(screen, !enabled);
 	TRACE(("UTF8 mode temporarily %s\n", enabled ? "ON" : "OFF"));
     }
+#else
+    (void) xw;
 #endif
 }
 
@@ -2656,14 +2658,12 @@ doparsing(XtermWidget xw, unsigned c, struct ParseState *sp)
 
 	case CASE_IL:
 	    TRACE(("CASE_IL - insert line\n"));
-	    set_cur_col(screen, ScrnLeftMargin(xw));
 	    InsertLine(xw, one_if_default(0));
 	    ResetState(sp);
 	    break;
 
 	case CASE_DL:
 	    TRACE(("CASE_DL - delete line\n"));
-	    set_cur_col(screen, ScrnLeftMargin(xw));
 	    DeleteLine(xw, one_if_default(0));
 	    ResetState(sp);
 	    break;
@@ -3225,8 +3225,10 @@ doparsing(XtermWidget xw, unsigned c, struct ParseState *sp)
 		    && screen->vtXX_level >= 2) {	/* VT220 */
 		    reply.a_param[count++] = 27;
 		    reply.a_param[count++] = 1;		/* North American */
-		    if (screen->vtXX_level >= 4) {	/* VT420 */
+		    if (screen->vtXX_level >= 3) {	/* VT320 */
 			reply.a_param[count++] = 0;	/* ready */
+		    }
+		    if (screen->vtXX_level >= 4) {	/* VT420 */
 			reply.a_param[count++] = 0;	/* LK201 */
 		    }
 		}
@@ -3623,10 +3625,16 @@ doparsing(XtermWidget xw, unsigned c, struct ParseState *sp)
 		    int new_vtXX_level = GetParam(0) - 60;
 		    int case_value = zero_if_default(1);
 		    /*
-		     * VT300, VT420, VT520 manuals claim that DECSCL does a
-		     * hard reset (RIS).  VT220 manual states that it is a soft
-		     * reset.  Perhaps both are right (unlikely).  Kermit says
-		     * it's soft.
+		     * Note:
+		     *
+		     * The VT300, VT420, VT520 manuals claim that DECSCL does a
+		     * hard reset (RIS).
+		     *
+		     * Both the VT220 manual and DEC STD 070 (which documents
+		     * levels 1-4 in detail) state that it is a soft reset.
+		     *
+		     * Perhaps both sets of manuals are right (unlikely). 
+		     * Kermit says it's soft.
 		     */
 		    ReallyReset(xw, False, False);
 		    init_parser(xw, sp);
@@ -4089,18 +4097,22 @@ doparsing(XtermWidget xw, unsigned c, struct ParseState *sp)
 	    break;
 
 	case CASE_DECRQCRA:
-	    if (screen->vtXX_level >= 4) {
+	    if (screen->vtXX_level >= 4 && AllowWindowOps(xw, ewGetChecksum)) {
 		int checksum;
+		int pid;
 
 		TRACE(("CASE_DECRQCRA - Request checksum of rectangular area\n"));
 		xtermCheckRect(xw, ParamPair(0), &checksum);
 		init_reply(ANSI_DCS);
 		count = 0;
-		reply.a_param[count++] = (ParmType) GetParam(1);	/* PID */
+		checksum &= 0xffff;
+		pid = GetParam(1);
+		reply.a_param[count++] = (ParmType) pid;
 		reply.a_delim = "!~";	/* delimiter */
 		reply.a_radix[count] = 16;
 		reply.a_param[count++] = (ParmType) checksum;
 		reply.a_nparam = (ParmType) count;
+		TRACE(("...checksum(%d) = %04X\n", pid, checksum));
 		unparseseq(xw, &reply);
 	    }
 	    ResetState(sp);
@@ -5196,15 +5208,13 @@ dotext(XtermWidget xw,
 #endif
 
 	int last_col = LineMaxCol(screen, ld);
-	if (last_col > (right + 1))
-	    last_col = right + 1;
+	if (last_col > right)
+	    last_col = right;
 	this_col = last_col - screen->cur_col + 1;
-	if (this_col <= 1) {
-	    if (screen->do_wrap) {
-		screen->do_wrap = False;
-		if ((xw->flags & WRAPAROUND)) {
-		    WrapLine(xw);
-		}
+	if (screen->do_wrap) {
+	    screen->do_wrap = False;
+	    if ((xw->flags & WRAPAROUND)) {
+		WrapLine(xw);
 	    }
 	    this_col = 1;
 	}
@@ -6764,6 +6774,41 @@ window_ops(XtermWidget xw)
 	}
 	break;
 
+#if OPT_MAXIMIZE
+    case ewGetScreenSizePixels:	/* Report the screen's size, in Pixels */
+	if (AllowWindowOps(xw, ewGetScreenSizePixels)) {
+	    TRACE(("...get screen size in pixels\n"));
+	    (void) QueryMaximize(xw, &root_width, &root_height);
+	    init_reply(ANSI_CSI);
+	    reply.a_pintro = 0;
+	    reply.a_nparam = 3;
+	    reply.a_param[0] = 5;
+	    reply.a_param[1] = (ParmType) root_height;
+	    reply.a_param[2] = (ParmType) root_width;
+	    reply.a_inters = 0;
+	    reply.a_final = 't';
+	    unparseseq(xw, &reply);
+	}
+	break;
+    case ewGetCharSizePixels:	/* Report the font's size, in pixel */
+	if (AllowWindowOps(xw, ewGetScreenSizeChars)) {
+	    TRACE(("...get font size in pixels\n"));
+	    TRACE(("...using font size %dx%d\n",
+		   FontHeight(screen),
+		   FontWidth(screen)));
+	    init_reply(ANSI_CSI);
+	    reply.a_pintro = 0;
+	    reply.a_nparam = 3;
+	    reply.a_param[0] = 6;
+	    reply.a_param[1] = (ParmType) FontHeight(screen);
+	    reply.a_param[2] = (ParmType) FontWidth(screen);
+	    reply.a_inters = 0;
+	    reply.a_final = 't';
+	    unparseseq(xw, &reply);
+	}
+	break;
+#endif
+
     case ewGetWinSizeChars:	/* Report the text's size in characters */
 	if (AllowWindowOps(xw, ewGetWinSizeChars)) {
 	    TRACE(("...get window size in characters\n"));
@@ -7057,6 +7102,9 @@ unparse_end(XtermWidget xw)
     TScreen *screen = TScreenOf(xw);
 
     if (screen->unparse_len) {
+	TRACE(("unparse_end %u:%s\n",
+	       screen->unparse_len,
+	       visibleIChars(screen->unparse_bfr, screen->unparse_len)));
 #ifdef VMS
 	tt_write(screen->unparse_bfr, screen->unparse_len);
 #else /* VMS */
@@ -7355,10 +7403,12 @@ RequestResize(XtermWidget xw, int rows, int cols, Bool text)
 	    askedWidth = FullWidth(screen);
     }
 
-    if (rows == 0)
+    if (rows == 0) {
 	askedHeight = (Dimension) attrs.height;
-    if (cols == 0)
+    }
+    if (cols == 0) {
 	askedWidth = (Dimension) attrs.width;
+    }
 
     if (xw->misc.limit_resize > 0) {
 	Dimension high = (Dimension) (xw->misc.limit_resize * attrs.height);
@@ -7889,10 +7939,13 @@ VTInitialize(Widget wrequest,
 	,DATA(GetWinTitle)
 	,DATA(PushTitle)
 	,DATA(PopTitle)
+	/* this item uses all remaining numbers in the sequence */
 	,DATA(SetWinLines)
+	/* starting at this point, numbers do not apply */
 	,DATA(SetXprop)
 	,DATA(GetSelection)
 	,DATA(SetSelection)
+	,DATA(GetChecksum)
 	,DATA_END
     };
 #undef DATA
@@ -11042,6 +11095,11 @@ static void
 ReallyReset(XtermWidget xw, Bool full, Bool saved)
 {
     TScreen *screen = TScreenOf(xw);
+    IFlags saveflags = xw->flags;
+
+    TRACE(("ReallyReset %s, %s\n",
+	   full ? "hard" : "soft",
+	   saved ? "clear savedLines" : "keep savedLines"));
 
     if (!XtIsRealized((Widget) xw) || (CURRENT_EMU() != (Widget) xw)) {
 	Bell(xw, XkbBI_MinorError, 0);
@@ -11180,22 +11238,10 @@ ReallyReset(XtermWidget xw, Bool full, Bool saved)
 	screen->paste_literal_nl = OFF;
 #endif /* OPT_READLINE */
 
-	if (screen->c132 && (xw->flags & IN132COLUMNS)) {
-	    Dimension reqWidth = (Dimension) (80 * FontWidth(screen)
-					      + 2 * screen->border
-					      + ScrollbarWidth(screen));
-	    Dimension reqHeight = (Dimension) (FontHeight(screen)
-					       * MaxRows(screen)
-					       + 2 * screen->border);
-	    Dimension replyWidth;
-	    Dimension replyHeight;
-
+	if (screen->c132 && (saveflags & IN132COLUMNS)) {
 	    TRACE(("Making resize-request to restore 80-columns %dx%d\n",
-		   reqHeight, reqWidth));
-	    REQ_RESIZE((Widget) xw,
-		       reqWidth,
-		       reqHeight,
-		       &replyWidth, &replyHeight);
+		   MaxRows(screen), MaxCols(screen)));
+	    RequestResize(xw, MaxRows(screen), 80, True);
 	    repairSizeHints();
 	    XSync(screen->display, False);	/* synchronize */
 	    if (xtermAppPending())

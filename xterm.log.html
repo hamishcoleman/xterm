@@ -2,7 +2,7 @@
  *****************************************************************************
  * this file is part of xterm                                                *
  *                                                                           *
- * Copyright 1997-2016,2017 by Thomas E. Dickey                              *
+ * Copyright 1997-2017,2018 by Thomas E. Dickey                              *
  *                                                                           *
  * All Rights Reserved                                                       *
  *                                                                           *
@@ -30,7 +30,7 @@
  * sale, use or other dealings in this Software without prior written        *
  * authorization.                                                            *
  *****************************************************************************
-  $XTermId: xterm.log.html,v 1.1815 2017/12/30 19:25:39 tom Exp $
+  $XTermId: xterm.log.html,v 1.1834 2018/04/15 23:17:12 tom Exp $
   -->
 <!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01//EN">
 
@@ -53,7 +53,7 @@
 <body>
   <hr>
 
-  <p>Copyright &copy; 1997-2016,2017 by <a href=
+  <p>Copyright &copy; 1997-2017,2018 by <a href=
   "mailto:dickey@invisible-island.net">Thomas E. Dickey</a></p>
   <hr>
 
@@ -72,6 +72,8 @@
   CHANGELOG</a>).</p>
 
   <ul>
+    <li><a href="#xterm_332">Patch #332 - 2018/04/15</a></li>
+
     <li><a href="#xterm_331">Patch #331 - 2017/12/30</a></li>
 
     <li><a href="#xterm_330">Patch #330 - 2017/06/20</a></li>
@@ -947,6 +949,77 @@
     <li><a href="#xterm_01">Patch #1 - 1996/1/6</a></li>
   </ul>
 
+  <h1><a name="xterm_332" id="xterm_332">Patch #332 -
+  2018/04/15</a></h1>
+
+  <ul>
+    <li>add a <code>GetChecksum</code> item to
+    <code>disallowedWindowOps</code></li>
+
+    <li>improve notes in <code>ctlseqs.ms</code> which mention
+    where various controls originated.</li>
+
+    <li>add control sequences for querying the X display size and
+    the character size, both in pixels to help eliminate some of
+    the constants in <code>esctest</code>.</li>
+
+    <li>fixes prompted by review of George Nachman's
+    <code>esctest</code> script:
+
+      <ul>
+        <li>add a null-pointer check and a limit-check in
+        <code>xtermCheckRect</code>.</li>
+
+        <li>correct limit-check for right-margin when processing
+        autowrapping if xterm is not built for
+        wide-characters.</li>
+
+        <li>repair logic in <code>RIS</code> to reset 132-column
+        mode when an escape sequence is used to enable
+        80/132-column switching.</li>
+
+        <li>correct array-limit for EWMH working state.</li>
+
+        <li>further improve limit-checks versus assert's (see
+        <a href="#xterm_315">patch #315</a>).</li>
+
+        <li>correct order of check-margins and move-to-left margin
+        for <code>DL</code> and <code>IL</code>.</li>
+
+        <li>modify reverse-wrap to pay attention to top/bottom
+        margins as it has done for left/right margins since
+        <a href="#xterm_279">patch #279</a>.</li>
+
+        <li>modify behavior of <code>DECFI</code> and
+        <code>DECBI</code> to not index the screen at the
+        left/right edge of the display unless those happen to be
+        the left/right margins.</li>
+
+        <li>add case for VT320 DSR response for keyboard
+        status.</li>
+      </ul>
+    </li>
+
+    <li>improve check for valid shell path using
+    <code>getusershell</code> and <code>endusershell</code> if
+    available, in case <code>/etc/shells</code> does not exist
+    (suggested by Rainer Orth).</li>
+
+    <li>modified configure checks for groff and man2html, to use
+    the latter by default, but allowing mandoc as a partial
+    replacement for former.</li>
+
+    <li>revisited the inconsistent copyright notices mentioned in
+    <a href="#xterm_165">patch #165</a>, and eliminate the issue as
+    mentioned in this <a href=
+    "https://invisible-island.net/personal/copyrights.html">copyright
+    discussion</a>.</li>
+
+    <li>fix typo in this change-log (report by Sven Joachim)</li>
+
+    <li>update config.guess, config.sub</li>
+  </ul>
+
   <h1><a name="xterm_331" id="xterm_331">Patch #331 -
   2017/12/30</a></h1>
 
@@ -1061,7 +1134,7 @@
 
     <li>add <code>directColor</code> resource.</li>
 
-    <li>additional manpage macro cleanup (Brandon Robinson, Debian
+    <li>additional manpage macro cleanup (Branden Robinson, Debian
     #880551).</li>
 
     <li>add optional support for direct-colors (adapted from patch
