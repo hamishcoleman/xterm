@@ -21,7 +21,7 @@
                              Thomas Dickey
                       XFree86 Project (1996-2006)
                     invisible-island.net (2006-2018)
-               updated for XTerm Patch #332 (2018/04/15)
+               updated for XTerm Patch #333 (2018/04/28)
 
 
 
@@ -161,13 +161,13 @@ VT100 Mode
 
 Most of these control sequences are standard VT102 control sequences,
 but there is support for later DEC VT terminals (i.e., VT220, VT320,
-VT420, VT510), as well as ISO 6429 and aixterm color controls.  The only
+VT420, VT510), as well as ECMA-48 and aixterm color controls.  The only
 VT102 feature not supported is auto-repeat, since the only way X pro-
 vides for this will affect all windows.
 
 There are additional control sequences to provide xterm-dependent func-
 tions, such as the scrollbar or window size.  Where the function is
-specified by DEC or ISO 6429, the code assigned to it is given in paren-
+specified by DEC or ECMA-48, the code assigned to it is given in paren-
 theses.
 
 The escape codes to designate and invoke character sets are specified by
@@ -430,7 +430,7 @@ CSI Ps M  Delete Ps Line(s) (default = 1) (DL).
 
 CSI Ps P  Delete Ps Character(s) (default = 1) (DCH).
 
-CSI Ps S  Scroll up Ps lines (default = 1) (SU).
+CSI Ps S  Scroll up Ps lines (default = 1) (SU), VT420, ECMA-48.
 
 CSI ? Pi; Pa; Pv S
           If configured to support either Sixel Graphics or ReGIS Graph-
@@ -467,15 +467,15 @@ CSI ? Pi; Pa; Pv S
               sizes, but disallows modifying those sizes because that is
               done once, using resource-values.
           o   Graphics geometry is not necessarily the same as "window
-              size" (see the dtterm window manipulation extensions). For
-              example, xterm limits the maximum graphics geometry at
+              size" (see the dtterm window manipulation extensions).
+              For example, xterm limits the maximum graphics geometry at
               compile time (1000x1000 as of version 328) although the
               window size can be larger.
           o   While resizing a window will always change the current
               graphics geometry, the reverse is not true.  Setting
               graphics geometry does not affect the window size.
 
-CSI Ps T  Scroll down Ps lines (default = 1) (SD).
+CSI Ps T  Scroll down Ps lines (default = 1) (SD), VT420.
 
 CSI Ps ; Ps ; Ps ; Ps ; Ps T
           Initiate highlight mouse tracking.  Parameters are
@@ -494,11 +494,16 @@ CSI > Ps; Ps T
             Ps = 2  -> Do not set window/icon labels using UTF-8.
             Ps = 3  -> Do not query window/icon labels using UTF-8.
 
-          (See discussion of "Title Modes").
+          (See discussion of Title Modes).
 
 CSI Ps X  Erase Ps Character(s) (default = 1) (ECH).
 
 CSI Ps Z  Cursor Backward Tabulation Ps tab stops (default = 1) (CBT).
+
+CSI Ps ^  Scroll down Ps lines (default = 1) (SD), ECMA-48.
+          This is probably an error in ECMA-48, because the standard
+          writes codes as pairs of decimal values, and this is "14" ver-
+          sus the VT420 "4".
 
 CSI Pm `  Character Position Absolute  [column] (default = [row,1])
           (HPA).
@@ -602,7 +607,7 @@ CSI ? Pm h
             Ps = 2 5  -> Show Cursor (DECTCEM), VT220.
             Ps = 3 0  -> Show scrollbar (rxvt).
             Ps = 3 5  -> Enable font-shifting functions (rxvt).
-            Ps = 3 8  -> Enter Tektronix Mode (DECTEK), xterm.
+            Ps = 3 8  -> Enter Tektronix Mode (DECTEK), VT240, xterm.
             Ps = 4 0  -> Allow 80 -> 132 Mode, xterm.
             Ps = 4 1  -> more(1) fix (see curses(3) resource).
             Ps = 4 2  -> Enable National Replacement Character sets
@@ -801,21 +806,21 @@ CSI ? Pm l
 CSI Pm m  Character Attributes (SGR).
             Ps = 0  -> Normal (default).
             Ps = 1  -> Bold.
-            Ps = 2  -> Faint, decreased intensity (ISO 6429).
-            Ps = 3  -> Italicized (ISO 6429).
+            Ps = 2  -> Faint, decreased intensity (ECMA-48).
+            Ps = 3  -> Italicized (ECMA-48).
             Ps = 4  -> Underlined.
             Ps = 5  -> Blink (appears as Bold in X11R6 xterm).
             Ps = 7  -> Inverse.
             Ps = 8  -> Invisible, i.e., hidden (VT300).
-            Ps = 9  -> Crossed-out characters (ISO 6429).
-            Ps = 2 1  -> Doubly-underlined (ISO 6429).
+            Ps = 9  -> Crossed-out characters (ECMA-48).
+            Ps = 2 1  -> Doubly-underlined (ECMA-48).
             Ps = 2 2  -> Normal (neither bold nor faint).
-            Ps = 2 3  -> Not italicized (ISO 6429).
+            Ps = 2 3  -> Not italicized (ECMA-48).
             Ps = 2 4  -> Not underlined.
             Ps = 2 5  -> Steady (not blinking).
             Ps = 2 7  -> Positive (not inverse).
             Ps = 2 8  -> Visible, i.e., not hidden (VT300).
-            Ps = 2 9  -> Not crossed-out (ISO 6429).
+            Ps = 2 9  -> Not crossed-out (ECMA-48).
             Ps = 3 0  -> Set foreground color to Black.
             Ps = 3 1  -> Set foreground color to Red.
             Ps = 3 2  -> Set foreground color to Green.
@@ -1087,8 +1092,16 @@ CSI ? Pm s
 CSI Ps ; Ps ; Ps t
           Window manipulation (from dtterm, as well as extensions by
           xterm).  These controls may be disabled using the allowWin-
-          dowOps resource.  Valid values for the first (and any addi-
-          tional parameters) are:
+          dowOps resource.
+
+          xterm uses Extended Window Manager Hints (EWMH) to maximize
+          the window.  Some window managers have incomplete support for
+          EWMH.  For instance, fvwm, flwm and quartz-wm advertise sup-
+          port for maximizing windows horizontally or vertically, but in
+          fact equate those to the maximize operation.
+
+          Valid values for the first (and any additional parameters)
+          are:
             Ps = 1  -> De-iconify window.
             Ps = 2  -> Iconify window.
             Ps = 3  ;  x ;  y -> Move window to [x, y].
@@ -1113,17 +1126,21 @@ CSI Ps ; Ps ; Ps t
             Ps = 1 0  ;  0  -> Undo full-screen mode.
             Ps = 1 0  ;  1  -> Change to full-screen.
             Ps = 1 0  ;  2  -> Toggle full-screen.
-            Ps = 1 1  -> Report xterm window state.  If the xterm window
-          is open (non-iconified), it returns CSI 1 t .  If the xterm
-          window is iconified, it returns CSI 2 t .
+            Ps = 1 1  -> Report xterm window state.
+          If the xterm window is non-iconified, it returns CSI 1 t .
+          If the xterm window is iconified, it returns CSI 2 t .
             Ps = 1 3  -> Report xterm window position.
           Result is CSI 3 ; x ; y t
-            Ps = 1 4  -> Report xterm window size in pixels.  Normally
-          xterm's window is larger than its text area, since it includes
-          the frame (or decoration) applied by the window manager, as
-          well as the area used by a scroll-bar.
+            Ps = 1 3  ;  2  -> Report xterm text-area position.
+          Result is CSI 3 ; x ; y t
+            Ps = 1 4  -> Report xterm text area size in pixels.
           Result is CSI  4  ;  height ;  width t
-            Ps = 1 5  -> Report X display size in pixels.
+            Ps = 1 4  ;  2  -> Report xterm window size in pixels.
+          Normally xterm's window is larger than its text area, since it
+          includes the frame (or decoration) applied by the window man-
+          ager, as well as the area used by a scroll-bar.
+          Result is CSI  4  ;  height ;  width t
+            Ps = 1 5  -> Report size of the screen in pixels.
           Result is CSI  5  ;  height ;  width t
             Ps = 1 6  -> Report xterm character size in pixels.
           Result is CSI  6  ;  height ;  width t
@@ -1155,7 +1172,7 @@ CSI > Ps; Ps t
             Ps = 1  -> Query window/icon labels using hexadecimal.
             Ps = 2  -> Set window/icon labels using UTF-8.
             Ps = 3  -> Query window/icon labels using UTF-8.  (See dis-
-          cussion of "Title Modes")
+          cussion of Title Modes)
 
 CSI Ps SP t
           Set warning-bell volume (DECSWBV), VT520.
@@ -1322,7 +1339,7 @@ OSC Ps ; Pt ST
             Ps = 2  -> Change Window Title to Pt.
             Ps = 3  -> Set X property on top-level window.  Pt should be
           in the form "prop=value", or just "prop" to delete the prop-
-          erty
+          erty.
             Ps = 4 ; c; spec -> Change Color Number c to the color spec-
           ified by spec.  This can be a name or RGB specification as per
           XParseColor.  Any number of c/spec pairs may be given.  The
@@ -1389,11 +1406,14 @@ OSC Ps ; Pt ST
           plus or minus sign) or absolute.  A number is expected but not
           required after the sign (the default is the current entry for
           relative, zero for absolute indexing).
+
           The same rule (plus or minus sign, optional number) is used
           when querying the font.  The remainder of Pt is ignored.
+
           A font can be specified after a "#" index expression, by
           adding a space and then the font specifier.
-          If the "TrueType Fonts" menu entry is set (the renderFont
+
+          If the TrueType Fonts menu entry is set (the renderFont
           resource), then this control sets/queries the faceName
           resource.
 
@@ -1409,12 +1429,15 @@ OSC Ps ; Pt ST
           or cut buffers 0 through 7 respectively, in the order given.
           If the parameter is empty, xterm uses s 0 , to specify the
           configurable primary/clipboard selection and cut buffer 0.
+
           The second parameter, Pd, gives the selection data.  Normally
           this is a string encoded in base64.  The data becomes the new
           selection, which is then available for pasting by other appli-
           cations.
+
           If the second parameter is a ? , xterm replies to the host
           with the selection data encoded using the same protocol.
+
           If the second parameter is neither a base64 string nor ? ,
           then the selection is cleared.
 
@@ -1455,6 +1478,14 @@ OSC Ps ; Pt ST
             Ps = 1 1 7  -> Reset highlight color.
             Ps = 1 1 8  -> Reset Tektronix cursor color.
             Ps = 1 1 9  -> Reset highlight foreground color.
+
+            Ps = I ; c -> Set icon to file. Sun shelltool, CDE dtterm.
+          The file is expected to be XPM format, and uses the same
+          search logic as the iconHint resource.
+
+            Ps = l ; c -> Set window title. Sun shelltool, CDE dtterm.
+
+            Ps = L ; c -> Set icon label. Sun shelltool, CDE dtterm.
 
 
 Privacy Message
@@ -1650,6 +1681,32 @@ For example, shift-F5 would be sent as CSI 1 5 ; 2 ~
 
 If the alwaysUseMods resource is set, the Meta modifier also is recog-
 nized, making parameters 9 through 16.
+
+The codes used for the PC-style function keys were inspired by a feature
+of the VT510, referred to in its reference manual as DECFNK.  In the
+DECFNK scheme, codes 2-8 identify modifiers for function-keys and cur-
+sor-, editing-keypad keys.  Unlike xterm, the VT510 limits the modifiers
+which can be used with cursor- and editing-keypad keys.  Although the
+name "DECFNK" implies that it is a mode, the VT510 manual mentions it
+only as a feature, which (like xterm) interacts with the DECUDK feature.
+Unlike xterm, VT510/VT520 provide an extension to DECUDK (DECPFK and
+DECPAK) which apparently was the reason for the feature in those termi-
+nals, i.e., for identifying a programmable key rather than making it
+simple for applications to obtain modifier information.  It is not
+described in the related VT520 manual.  Neither manual was readily
+available at the time the feature was added to xterm.
+
+On the other hand, the VT510 and VT520 reference manuals do document a
+related feature.  That is its emulation of the SCO console, which is
+similar to the "xterm-sco" terminal description.  The SCO console func-
+tion-keys are less useful to applications developers than the approach
+used by xterm because
+
+o   the relationship between modifiers and the characters sent by func-
+    tion-keys is not readily apparent, and
+
+o   the scheme is not extensible, i.e., it is an ad hoc asssignment lim-
+    ited to two modifiers (shift and control).
 
 
 VT220-Style Function Keys
@@ -1965,13 +2022,19 @@ On button press, the same information as for normal tracking is gener-
 ated; xterm then waits for the program to send mouse tracking informa-
 tion.  All X events are ignored until the proper escape sequence is
 received from the pty: CSI Ps ; Ps ; Ps ; Ps ; Ps T .  The parameters
-are func, startx, starty, firstrow, and lastrow.  func is non-zero to
-initiate highlight tracking and zero to abort.  startx and starty give
-the starting x and y location for the highlighted region.  The ending
-location tracks the mouse, but will never be above row firstrow and will
-always be above row lastrow.  (The top of the screen is row 1.)  When
-the button is released, xterm reports the ending position one of two
-ways:
+are func, startx, starty, firstrow, and lastrow.
+
+o   func is non-zero to initiate highlight tracking and zero to abort.
+
+o   startx and starty give the starting x and y location for the high-
+    lighted region.
+
+o   The ending location tracks the mouse, but will never be above row
+    firstrow and will always be above row lastrow.  (The top of the
+    screen is row 1.)
+
+When the button is released, xterm reports the ending position one of
+two ways:
 
 o   if the start and end coordinates are the same locations:
     CSI t CxCy.
@@ -2149,6 +2212,14 @@ Graph mode supports the 12-bit addressing of the Tektronix 4014.  The
 major features missing are the write-through and defocused modes.  This
 document does not describe the commands used in the various Tektronix
 plotting modes but does describe the commands to switch modes.
+
+Some of the sequences are specific to xterm.  The Tektronix emulation
+was added in X10R4 (1986).  The VT240, introduced two years earlier,
+also supported Tektronix 4010/4014.  Unlike xterm, the VT240 documenta-
+tion implies (there is an obvious error in section 6.9 "Entering and
+Exiting 4010/4014 Mode") that exiting back to ANSI mode is done by
+resetting private mode 3 8  (DECTEK) rather than ESC ETX .  A real Tek-
+tronix 4014 would not respond to either.
 
 BEL       Bell (Ctrl-G).
 
@@ -2342,6 +2413,9 @@ o   VT220 Programmer Pocket Guide.
 o   VT220 Programmer Reference Manual.
     Digital Equipment Corporation (EK-VT220-RM-002, August 1984).
 
+o   VT240 Programmer Reference Manual.
+    Digital Equipment Corporation (EK-VT240-RM-002, October 1984).
+
 o   VT330/VT340 Programmer Reference Manual
     Volume 1: Text Programming.
     Digital Equipment Corporation (EK-VT3XX-TP-001, March 1987).
@@ -2357,6 +2431,10 @@ o   Installing and Using
 
 o   VT420 Programmer Reference Manual.
     Digital Equipment Corporation (EK-VT420-RM-002, February 1992).
+
+o   VT510 Video Terminal
+    Programmer Information.
+    Digital Equipment Corporation (EK-VT510-RM B01, November 1993).
 
 o   VT520/VT525 Video Terminal
     Programmer Information.
@@ -2442,31 +2520,31 @@ o   Xterm supports control sequences for manipulating its window which
     CSI 1 2 t     -     -      -     -
     CSI 1 3 t    yes   yes    yes    report window position
     CSI 1 4 t    yes   yes    yes    report window size in pixels
-    CSI 1 5 t     -     -     yes    report X display size in pixels
+    CSI 1 5 t     -     -     yes    report screen size in pixels
     CSI 1 6 t     -     -     yes    report character cell in pixels
     CSI 1 7 t     -     -      -     -
     CSI 1 8 t    yes   yes    yes    report window size in chars
-    CSI 1 9 t     -     -     yes    report window size in pixels
+    CSI 1 9 t     -     -     yes    report screen size in chars
     CSI 2 0 t     -    yes    yes    report icon label
     CSI 2 1 t     -    yes    yes    report window title
     CSI 2 2 t     -     -     yes    save window/icon title
     CSI 2 3 t     -     -     yes    restore window/icon title
     CSI 2 4 t     -     -     yes    resize window (DECSLPP)
-    OSC 1 ST     yes   yes    yes    set window and icon title
-    OSC 2 ST      -     -     yes    set icon label
-    OSC 3 ST      -     -     yes    set window title
-    OSC I ST     yes   yes     -     set icon to file
-    OSC L ST     yes   yes     -     set icon label
+    OSC 0 ST      -    yes    yes    set window and icon title
+    OSC 1 ST      -    yes    yes    set icon label
+    OSC 2 ST      -    yes    yes    set window title
+    OSC 3 ST      -    n/a    yes    set X server property
+    OSC I ST     yes   yes    yes    set icon to file
+    OSC l ST     yes   yes    yes    set window title
+    OSC L ST     yes   yes    yes    set icon label
 
     Besides the Sun-derived OSC controls for setting window title and
     icon label, dtterm also supported the xterm controls for the same
     feature.
 
-    While the CDE source was unavailable for inspection until 2012,
-    testing the changes for vttest demonstrated that the pixel-related
-    set/get controls deal with the shell window (counting window manager
-    decorations) while character-related set/get controls deal with the
-    terminal window, like xterm.
+    The CDE source was unavailable for inspection until 2012, so that
+    clarification of the details of the window operations relied upon
+    vttest.
 
 o   The control sequences for saving/restoring the cursor and for sav-
     ing/restoring "DEC Private Mode Values" may appear to be related

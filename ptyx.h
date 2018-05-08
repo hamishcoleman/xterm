@@ -1,4 +1,4 @@
-/* $XTermId: ptyx.h,v 1.883 2018/04/12 00:59:34 tom Exp $ */
+/* $XTermId: ptyx.h,v 1.887 2018/05/02 21:52:26 tom Exp $ */
 
 /*
  * Copyright 1999-2017,2018 by Thomas E. Dickey
@@ -605,7 +605,7 @@ typedef struct {
 
 #ifndef OPT_INPUT_METHOD
 #if (XtSpecificationRelease >= 6)
-#define OPT_INPUT_METHOD 1 /* true if xterm uses input-method support */
+#define OPT_INPUT_METHOD OPT_I18N_SUPPORT /* true if xterm uses input-method support */
 #else
 #define OPT_INPUT_METHOD 0
 #endif
@@ -705,6 +705,10 @@ typedef struct {
 
 #ifndef OPT_REPORT_FONTS
 #define OPT_REPORT_FONTS   1 /* provide "-report-fonts" option */
+#endif
+
+#ifndef OPT_REPORT_ICONS
+#define OPT_REPORT_ICONS   1 /* provide "-report-fonts" option */
 #endif
 
 #ifndef OPT_SAME_NAME
@@ -1200,6 +1204,16 @@ typedef enum {
 } MouseOps;
 
 typedef enum {
+    epC0 = 1
+    , epBS
+    , epCR
+    , epDEL
+    , epHT
+    , epNL
+    , epLAST
+} PasteControls;
+
+typedef enum {
     etSetTcap = 1
     , etGetTcap
     , etLAST
@@ -1353,6 +1367,9 @@ typedef enum {
 # define if_OPT_DIRECT_COLOR(screen, code) /* nothing */
 # define if_OPT_DIRECT_COLOR2(screen, test, code) /* nothing */
 #endif
+
+#define if_OPT_DIRECT_COLOR2_else(cond, test, stmt) \
+	if_OPT_DIRECT_COLOR2(cond, test, stmt else)
 
 #define COLOR_RES_NAME(root) "color" root
 
@@ -2207,6 +2224,9 @@ typedef struct {
 
 	String		disallowedMouseOps;
 	char		disallow_mouse_ops[emLAST];
+
+	String		disallowedPasteControls;
+	char		disallow_paste_controls[epLAST];
 
 	String		disallowedTcapOps;
 	char		disallow_tcap_ops[etLAST];

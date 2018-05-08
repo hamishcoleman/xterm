@@ -1,7 +1,7 @@
-/* $XTermId: xterm.h,v 1.789 2017/12/26 11:37:37 tom Exp $ */
+/* $XTermId: xterm.h,v 1.794 2018/04/29 22:17:28 tom Exp $ */
 
 /*
- * Copyright 1999-2016,2017 by Thomas E. Dickey
+ * Copyright 1999-2017,2018 by Thomas E. Dickey
  *
  *                         All Rights Reserved
  *
@@ -442,6 +442,7 @@ extern char **environ;
 #define XtNdisallowedColorOps	"disallowedColorOps"
 #define XtNdisallowedFontOps	"disallowedFontOps"
 #define XtNdisallowedMouseOps	"disallowedMouseOps"
+#define XtNdisallowedPasteControls "disallowedPasteControls"
 #define XtNdisallowedTcapOps	"disallowedTcapOps"
 #define XtNdisallowedWindowOps	"disallowedWindowOps"
 #define XtNdynamicColors	"dynamicColors"
@@ -635,6 +636,7 @@ extern char **environ;
 #define XtCDisallowedColorOps	"DisallowedColorOps"
 #define XtCDisallowedFontOps	"DisallowedFontOps"
 #define XtCDisallowedMouseOps	"DisallowedMouseOps"
+#define XtCDisallowedPasteControls "DisallowedPasteControls"
 #define XtCDisallowedTcapOps	"DisallowedTcapOps"
 #define XtCDisallowedWindowOps	"DisallowedWindowOps"
 #define XtCDynamicColors	"DynamicColors"
@@ -1117,7 +1119,7 @@ extern void xtermBell(XtermWidget /* xw */, int /* which */, int /* percent */);
 extern void xtermCopyEnv (char ** /* oldenv */);
 extern void xtermDisplayCursor (XtermWidget /* xw */);
 extern void xtermEmbedWindow (Window /* winToEmbedInfo */);
-extern void xtermLoadIcon (XtermWidget /* xw */);
+extern void xtermLoadIcon (XtermWidget /* xw */, const char * /* icon_hint */);
 extern void xtermPerror (const char * /*fmt*/,...) GCC_PRINTFLIKE(1,2);
 extern void xtermSetenv (const char * /* var */, const char * /* value */);
 extern void xtermSetWinSize (XtermWidget /* xw */);
@@ -1146,6 +1148,13 @@ extern void HandleIconify              PROTO_XT_ACTIONS_ARGS;
 extern void HandleMaximize             PROTO_XT_ACTIONS_ARGS;
 extern void HandleRestoreSize          PROTO_XT_ACTIONS_ARGS;
 extern void RequestMaximize (XtermWidget  /* termw */, int  /* maximize */);
+#endif
+
+#if OPT_REPORT_ICONS
+extern void report_icons(const char *fmt,...) GCC_PRINTFLIKE(1,2);
+#define ReportIcons(params)	report_icons params
+#else
+#define ReportIcons(params)	TRACE(params)
 #endif
 
 #if OPT_SCROLL_LOCK

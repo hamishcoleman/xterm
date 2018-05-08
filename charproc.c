@@ -1,4 +1,4 @@
-/* $XTermId: charproc.c,v 1.1529 2018/04/12 00:56:35 tom Exp $ */
+/* $XTermId: charproc.c,v 1.1545 2018/05/02 21:51:17 tom Exp $ */
 
 /*
  * Copyright 1999-2017,2018 by Thomas E. Dickey
@@ -185,7 +185,7 @@ static void StopBlinking(TScreen * /* screen */ );
 #define StopBlinking(screen)	/* nothing */
 #endif
 
-#if OPT_I18N_SUPPORT && OPT_INPUT_METHOD
+#if OPT_INPUT_METHOD
 static void PreeditPosition(XtermWidget /* xw */ );
 #endif
 
@@ -356,6 +356,10 @@ static XtActionsRec actionsList[] = {
     { "meta-sends-escape",	HandleMetaEsc },
     { "set-num-lock",		HandleNumLock },
 #endif
+#ifdef OPT_PRINT_ON_EXIT
+    { "print-immediate",	HandlePrintImmediate },
+    { "print-on-error",		HandlePrintOnError },
+#endif
 #if OPT_READLINE
     { "readline-button",	ReadLineButton },
 #endif
@@ -519,6 +523,8 @@ static XtResource xterm_resources[] =
 	 screen.disallowedFontOps, DEF_DISALLOWED_FONT),
     Sres(XtNdisallowedMouseOps, XtCDisallowedMouseOps,
 	 screen.disallowedMouseOps, DEF_DISALLOWED_MOUSE),
+    Sres(XtNdisallowedPasteControls, XtCDisallowedPasteControls,
+	 screen.disallowedPasteControls, DEF_DISALLOWED_PASTE_CONTROLS),
     Sres(XtNdisallowedTcapOps, XtCDisallowedTcapOps,
 	 screen.disallowedTcapOps, DEF_DISALLOWED_TCAP),
     Sres(XtNdisallowedWindowOps, XtCDisallowedWindowOps,
@@ -816,7 +822,7 @@ static void VTRealize(Widget w, XtValueMask * valuemask,
 		      XSetWindowAttributes * values);
 static void VTResize(Widget w);
 
-#if OPT_I18N_SUPPORT && OPT_INPUT_METHOD
+#if OPT_INPUT_METHOD
 static void VTInitI18N(XtermWidget);
 #endif
 
@@ -2702,6 +2708,16 @@ doparsing(XtermWidget xw, unsigned c, struct ParseState *sp)
 	    ResetState(sp);
 	    break;
 
+	case CASE_SD:
+	    /*
+	     * Cater to ECMA-48's typographical error...
+	     */
+	    TRACE(("CASE_SD - scroll down\n"));
+	    RevScroll(xw, one_if_default(0));
+	    do_xevents();
+	    ResetState(sp);
+	    break;
+
 	case CASE_DECID:
 	    TRACE(("CASE_DECID\n"));
 	    if_OPT_VT52_MODE(screen, {
@@ -3238,7 +3254,7 @@ doparsing(XtermWidget xw, unsigned c, struct ParseState *sp)
 	    case 55:		/* according to the VT330/VT340 Text Programming Manual */
 		TRACE(("...request locator status\n"));
 		if (sp->private_function
-		    && screen->vtXX_level >= 2) {	/* VT220 */
+		    && screen->vtXX_level >= 3) {	/* VT330 */
 #if OPT_DEC_LOCATOR
 		    reply.a_param[count++] = 50;	/* locator ready */
 #else
@@ -3249,7 +3265,7 @@ doparsing(XtermWidget xw, unsigned c, struct ParseState *sp)
 	    case 56:
 		TRACE(("...request locator type\n"));
 		if (sp->private_function
-		    && screen->vtXX_level >= 3) {	/* VT330 (FIXME: what about VT220?) */
+		    && screen->vtXX_level >= 3) {	/* VT330 */
 		    reply.a_param[count++] = 57;
 #if OPT_DEC_LOCATOR
 		    reply.a_param[count++] = 1;		/* mouse */
@@ -4696,6 +4712,31 @@ reallyStopBlinking(TScreen *screen)
 }
 #endif
 
+static void
+update_the_screen(XtermWidget xw)
+{
+    TScreen *screen = TScreenOf(xw);
+    Boolean moved;
+
+    if (screen->scroll_amt)
+	FlushScroll(xw);
+    moved = CursorMoved(screen);
+    if (screen->cursor_set && moved) {
+	if (screen->cursor_state)
+	    HideCursor();
+	ShowCursor();
+#if OPT_INPUT_METHOD
+	PreeditPosition(xw);
+#endif
+    } else {
+#if OPT_INPUT_METHOD
+	if (moved)
+	    PreeditPosition(xw);
+#endif
+	updateCursor(screen);
+    }
+}
+
 #ifdef VMS
 #define	ptymask()	(v_bufptr > v_bufstr ? pty_mask : 0)
 
@@ -4750,18 +4791,7 @@ in_put(XtermWidget xw)
 		WindowScroll(xw, 0, False);
 	    break;
 	}
-	if (screen->scroll_amt)
-	    FlushScroll(xw);
-	if (screen->cursor_set && CursorMoved(screen)) {
-	    if (screen->cursor_state)
-		HideCursor();
-	    ShowCursor();
-#if OPT_I18N_SUPPORT && OPT_INPUT_METHOD
-	    PreeditPosition(xw);
-#endif
-	} else {
-	    updateCursor(screen);
-	}
+	update_the_screen(xw);
 
 	if (QLength(screen->display)) {
 	    select_mask = X_mask;
@@ -4869,19 +4899,7 @@ in_put(XtermWidget xw)
 	    break;
 #endif
 	}
-	/* update the screen */
-	if (screen->scroll_amt)
-	    FlushScroll(xw);
-	if (screen->cursor_set && CursorMoved(screen)) {
-	    if (screen->cursor_state)
-		HideCursor();
-	    ShowCursor();
-#if OPT_I18N_SUPPORT && OPT_INPUT_METHOD
-	    PreeditPosition(xw);
-#endif
-	} else {
-	    updateCursor(screen);
-	}
+	update_the_screen(xw);
 
 	XFlush(screen->display);	/* always flush writes before waiting */
 
@@ -4978,7 +4996,7 @@ doinput(void)
     return nextPtyData(screen, VTbuffer);
 }
 
-#if OPT_I18N_SUPPORT && OPT_INPUT_METHOD
+#if OPT_INPUT_METHOD
 /*
  *  For OverTheSpot, client has to inform the position for XIM preedit.
  */
@@ -6718,7 +6736,17 @@ window_ops(XtermWidget xw)
 	break;
     case ewFullscreenWin:	/* Fullscreen or restore */
 	if (AllowWindowOps(xw, ewFullscreenWin)) {
-	    FullScreen(xw, zero_if_default(1));
+	    switch (zero_if_default(1)) {
+	    default:
+		RequestMaximize(xw, 0);
+		break;
+	    case 1:
+		RequestMaximize(xw, 1);
+		break;
+	    case 2:
+		RequestMaximize(xw, !(screen->restore_data));
+		break;
+	    }
 	}
 	break;
 #endif
@@ -6744,13 +6772,32 @@ window_ops(XtermWidget xw)
     case ewGetWinPosition:	/* Report the window's position */
 	if (AllowWindowOps(xw, ewGetWinPosition)) {
 	    TRACE(("...get window position\n"));
-	    xtermGetWinAttrs(screen->display,
-			     WMFrameWindow(xw),
-			     &win_attrs);
 	    init_reply(ANSI_CSI);
 	    reply.a_pintro = 0;
 	    reply.a_nparam = 3;
 	    reply.a_param[0] = 3;
+	    switch (zero_if_default(1)) {
+	    case 2:		/* report the text-window's position */
+		win_attrs.y = 0;
+		win_attrs.x = 0;
+		{
+		    Widget mw;
+		    for (mw = (Widget) xw; mw != 0; mw = XtParent(mw)) {
+			win_attrs.x += mw->core.x;
+			win_attrs.y += mw->core.y;
+			if (mw == SHELL_OF(xw))
+			    break;
+		    }
+		}
+		win_attrs.x += OriginX(screen);
+		win_attrs.y += OriginY(screen);
+		break;
+	    default:
+		xtermGetWinAttrs(screen->display,
+				 WMFrameWindow(xw),
+				 &win_attrs);
+		break;
+	    }
 	    reply.a_param[1] = (ParmType) win_attrs.x;
 	    reply.a_param[2] = (ParmType) win_attrs.y;
 	    reply.a_inters = 0;
@@ -6761,13 +6808,27 @@ window_ops(XtermWidget xw)
 
     case ewGetWinSizePixels:	/* Report the window's size in pixels */
 	if (AllowWindowOps(xw, ewGetWinSizePixels)) {
+	    ParmType high = (ParmType) Height(screen);
+	    ParmType wide = (ParmType) Width(screen);
+
 	    TRACE(("...get window size in pixels\n"));
 	    init_reply(ANSI_CSI);
 	    reply.a_pintro = 0;
 	    reply.a_nparam = 3;
 	    reply.a_param[0] = 4;
-	    reply.a_param[1] = (ParmType) Height(screen);
-	    reply.a_param[2] = (ParmType) Width(screen);
+	    switch (zero_if_default(1)) {
+	    case 2:		/* report the shell-window's size */
+		xtermGetWinAttrs(screen->display,
+				 WMFrameWindow(xw),
+				 &win_attrs);
+		high = (ParmType) win_attrs.height;
+		wide = (ParmType) win_attrs.width;
+		/* FALLTHRU */
+	    default:
+		reply.a_param[1] = high;
+		reply.a_param[2] = wide;
+		break;
+	    }
 	    reply.a_inters = 0;
 	    reply.a_final = 't';
 	    unparseseq(xw, &reply);
@@ -7904,6 +7965,19 @@ VTInitialize(Widget wrequest,
     };
 #undef DATA
 
+#define DATA(name) { #name, ep##name }
+    static const FlagList tblPasteControls[] =
+    {
+	DATA(C0)
+	,DATA(BS)
+	,DATA(CR)
+	,DATA(DEL)
+	,DATA(HT)
+	,DATA(NL)
+	,DATA_END
+    };
+#undef DATA
+
 #define DATA(name) { #name, et##name }
     static const FlagList tblTcapOps[] =
     {
@@ -7939,9 +8013,9 @@ VTInitialize(Widget wrequest,
 	,DATA(GetWinTitle)
 	,DATA(PushTitle)
 	,DATA(PopTitle)
-	/* this item uses all remaining numbers in the sequence */
+    /* this item uses all remaining numbers in the sequence */
 	,DATA(SetWinLines)
-	/* starting at this point, numbers do not apply */
+    /* starting at this point, numbers do not apply */
 	,DATA(SetXprop)
 	,DATA(GetSelection)
 	,DATA(SetSelection)
@@ -8304,6 +8378,12 @@ VTInitialize(Widget wrequest,
     set_flags_from_list(screen->disallow_mouse_ops,
 			screen->disallowedMouseOps,
 			tblMouseOps);
+
+    init_Sres(screen.disallowedPasteControls);
+
+    set_flags_from_list(screen->disallow_paste_controls,
+			screen->disallowedPasteControls,
+			tblPasteControls);
 
     init_Sres(screen.disallowedTcapOps);
 
@@ -9070,7 +9150,7 @@ releaseWindowGCs(XtermWidget xw, VTwin *win)
 	    name = 0; \
 	}
 
-#if OPT_I18N_SUPPORT && OPT_INPUT_METHOD
+#if OPT_INPUT_METHOD
 static void
 cleanupInputMethod(XtermWidget xw)
 {
@@ -9226,6 +9306,7 @@ VTDestroy(Widget w GCC_UNUSED)
     TRACE_FREE_LEAK(screen->disallowedColorOps);
     TRACE_FREE_LEAK(screen->disallowedFontOps);
     TRACE_FREE_LEAK(screen->disallowedMouseOps);
+    TRACE_FREE_LEAK(screen->disallowedPasteControls);
     TRACE_FREE_LEAK(screen->disallowedTcapOps);
     TRACE_FREE_LEAK(screen->disallowedWinOps);
     TRACE_FREE_LEAK(screen->default_string);
@@ -9699,11 +9780,11 @@ VTRealize(Widget w,
 	getIconicFont(screen)->fs =
 	    XLoadQueryFont(screen->display,
 			   screen->MenuFontName(fontMenu_font1));
-	TRACE(("%susing font1 '%s' as iconFont\n",
-	       (getIconicFont(screen)->fs
-		? ""
-		: "NOT "),
-	       screen->MenuFontName(fontMenu_font1)));
+	ReportIcons(("%susing font1 '%s' as iconFont\n",
+		     (getIconicFont(screen)->fs
+		      ? ""
+		      : "NOT "),
+		     screen->MenuFontName(fontMenu_font1)));
     }
 #if OPT_RENDERFONT
     /*
@@ -9716,11 +9797,12 @@ VTRealize(Widget w,
 	&& getIconicFont(screen)->fs == 0) {
 	screen->icon_fontnum = fontMenu_default;
 	getIconicFont(screen)->fs = getNormalFont(screen, fNorm)->fs;	/* need for next-if */
-	TRACE(("using TrueType font as iconFont\n"));
+	ReportIcons(("using TrueType font as iconFont\n"));
     }
 #endif
     if ((xw->work.active_icon == eiDefault) && getIconicFont(screen)->fs) {
 	char *wm_name = getWindowManagerName(xw);
+	ReportIcons(("window manager name is %s\n", wm_name));
 	if (x_strncasecmp(wm_name, "fvwm", 4) &&
 	    x_strncasecmp(wm_name, "window maker", 12))
 	    xw->work.active_icon = eiFalse;
@@ -9732,7 +9814,7 @@ VTRealize(Widget w,
 	VTwin *win = &(screen->iconVwin);
 	int save_fontnum = screen->menu_font_number;
 
-	TRACE(("Initializing active-icon %d\n", screen->icon_fontnum));
+	ReportIcons(("initializing active-icon %d\n", screen->icon_fontnum));
 	screen->menu_font_number = screen->icon_fontnum;
 	XtVaGetValues(shell,
 		      XtNiconX, &iconX,
@@ -9788,12 +9870,12 @@ VTRealize(Widget w,
 	update_activeicon();
 #endif
     } else {
-	TRACE(("Disabled active-icon\n"));
+	ReportIcons(("disabled active-icon\n"));
 	xw->work.active_icon = eiFalse;
     }
 #endif /* NO_ACTIVE_ICON */
 
-#if OPT_I18N_SUPPORT && OPT_INPUT_METHOD
+#if OPT_INPUT_METHOD
     VTInitI18N(xw);
 #endif
 #if OPT_NUM_LOCK
@@ -9848,7 +9930,7 @@ VTRealize(Widget w,
 #ifndef NO_ACTIVE_ICON
     if (!xw->work.active_icon)
 #endif
-	xtermLoadIcon(xw);
+	xtermLoadIcon(xw, resource.icon_hint);
 
     /*
      * Do this last, since it may change the layout via a resize.
@@ -9862,7 +9944,7 @@ VTRealize(Widget w,
     TRACE(("}} VTRealize\n"));
 }
 
-#if OPT_I18N_SUPPORT && OPT_INPUT_METHOD
+#if OPT_INPUT_METHOD
 
 /* limit this feature to recent XFree86 since X11R6.x core dumps */
 #if defined(XtSpecificationRelease) && XtSpecificationRelease >= 6 && defined(X_HAVE_UTF8_STRING)
@@ -10195,7 +10277,7 @@ lookupTInput(XtermWidget xw, Widget w)
 
     return result;
 }
-#endif /* OPT_I18N_SUPPORT && OPT_INPUT_METHOD */
+#endif /* OPT_INPUT_METHOD */
 
 static void
 set_cursor_outline_gc(XtermWidget xw,
@@ -10758,7 +10840,7 @@ HideCursor(void)
     int x, y;
     IChar base;
     unsigned flags;
-    CellColor fg_bg;
+    CellColor fg_bg = initCColor;
     Bool in_selection;
 #if OPT_WIDE_CHARS
     int my_col = 0;
@@ -10826,9 +10908,6 @@ HideCursor(void)
 	}
     }
 #endif
-#endif
-#if OPT_ISO_COLORS
-    fg_bg = initCColor;
 #endif
 
     /*

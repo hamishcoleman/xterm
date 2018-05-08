@@ -1,7 +1,7 @@
-/* $XTermId: button.c,v 1.526 2017/12/01 00:47:35 tom Exp $ */
+/* $XTermId: button.c,v 1.529 2018/05/01 00:36:18 tom Exp $ */
 
 /*
- * Copyright 1999-2016,2017 by Thomas E. Dickey
+ * Copyright 1999-2017,2018 by Thomas E. Dickey
  *
  *                         All Rights Reserved
  *
@@ -96,7 +96,7 @@ button.c	Handles button events in the terminal emulator.
 #include <wcwidth.h>
 #else
 #define CharacterClass(value) \
-	charClass[(value) & ((sizeof(charClass)/sizeof(charClass[0]))-1)]
+	charClass[(value) & (int)((sizeof(charClass)/sizeof(charClass[0]))-1)]
 #endif
 
     /*
@@ -1257,7 +1257,7 @@ UTF8toLatin1(TScreen *screen, Char *s, unsigned long len, unsigned long *result)
 	    } else if (value < 256) {
 		AddChar(&buffer, &used, offset, CharOf(value));
 	    } else {
-		unsigned eqv = ucs2dec(value);
+		unsigned eqv = ucs2dec(screen, value);
 		if (xtermIsDecGraphic(eqv)) {
 		    AddChar(&buffer, &used, offset, DECtoASCII(eqv));
 		} else {
@@ -2075,17 +2075,33 @@ removeControls(XtermWidget xw, char *value)
 	size_t src = 0;
 	while ((value[dst] = value[src]) != '\0') {
 	    int ch = CharOf(value[src++]);
+
+#define ReplacePaste(n) \
+	    if (screen->disallow_paste_controls[n]) \
+		value[dst] = ' '
+
 	    if (ch < 32) {
+		ReplacePaste(epC0);
 		switch (ch) {
-		case '\b':
-		case '\t':
-		case '\n':
-		case '\r':
-		    ++dst;
+		case ANSI_BS:
+		    ReplacePaste(epBS);
+		    break;
+		case ANSI_HT:
+		    ReplacePaste(epHT);
+		    break;
+		case ANSI_LF:
+		    ReplacePaste(epNL);
+		    break;
+		case ANSI_CR:
+		    ReplacePaste(epCR);
 		    break;
 		default:
 		    continue;
 		}
+		++dst;
+	    } else if (ch == ANSI_DEL) {
+		ReplacePaste(epDEL);
+		++dst;
 	    }
 #if OPT_WIDE_CHARS
 	    else if (screen->utf8_inparse || screen->utf8_nrc_mode)

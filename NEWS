@@ -1,39 +1,34 @@
 The NEWS file was generated from xterm.log.html, which serves as the changelog
 for xterm.
 --------------------------------------------------------------------------------
-                            Patch #332 - 2018/04/15
+                            Patch #333 - 2018/05/03
 
-     * add a GetChecksum item to disallowedWindowOps
-     * improve  notes  in  ctlseqs.ms which mention where various controls
-       originated.
-     * add  control  sequences  for  querying  the  X display size and the
-       character  size,  both  in  pixels  to  help  eliminate some of the
-       constants in esctest.
-     * fixes prompted by review of George Nachman's esctest script:
-          + add a null-pointer check and a limit-check in xtermCheckRect.
-          + correct   limit-check   for   right-margin   when   processing
-            autowrapping if xterm is not built for wide-characters.
-          + repair  logic  in  RIS to reset 132-column mode when an escape
-            sequence is used to enable 80/132-column switching.
-          + correct array-limit for EWMH working state.
-          + further improve limit-checks versus assert's (see patch #315).
-          + correct  order of check-margins and move-to-left margin for DL
-            and IL.
-          + modify  reverse-wrap to pay attention to top/bottom margins as
-            it has done for left/right margins since patch #279.
-          + modify  behavior of DECFI and DECBI to not index the screen at
-            the  left/right  edge of the display unless those happen to be
-            the left/right margins.
-          + add case for VT320 DSR response for keyboard status.
-     * improve   check   for  valid  shell  path  using  getusershell  and
-       endusershell  if  available,  in  case  /etc/shells  does not exist
-       (suggested by Rainer Orth).
-     * modified configure checks for groff and man2html, to use the latter
-       by  default,  but  allowing  mandoc  as  a  partial replacement for
-       former.
-     * revisited  the  inconsistent  copyright  notices mentioned in patch
-       #165,  and  eliminate  the  issue  as  mentioned  in this copyright
-       discussion.
-     * fix typo in this change-log (report by Sven Joachim)
-     * update config.guess, config.sub
+     * ensure that i18n is enabled if input-method is enabled.
+     * modify  logic for pre-edit to update spot-location while the cursor
+       is invisible (Kakoune #1940).
+     * change default icon to newer one, "mini.xterm".
+     * install   a   complete  set  of  icons,  to  simplify  post-install
+       customization.
+     * add resource disallowedPasteControls to extend filtering of control
+       characters from pastes.
+     * add  print-on-error  action-hook,  and  document  action-hooks  for
+       dump-html, dump-svg.
+     * provide  action-hook  for print-immediate, which was available only
+       as a menu-item (report by Rastislav Barlik).
+     * continue to improve notes in ctlseqs.ms which mention where various
+       controls originated.
+     * add  case  to  accept ECMA-48's bogus SD, but document the issue in
+       ctlseqs.ms.
+     * add control sequence for loading XPM-icon file, using the analogous
+       control sequence from shelltool/dtterm.
+     * add  -report-icons  option,  to  report  on  XPM-icon and title-bar
+       updates.
+     * correct a discrepancy between locator-reports for VT220 vs VT330.
+     * add  window-ops  control  sequences to complement existing ones for
+       reporting  window-position  and  text-area  size  with  reports for
+       text-area position and window-size.
+     * display vt52 graphics mode characters.
+     * correct  case-statement  for  window-ops  10, overlooked since some
+       window  managers  equate  vertical-maximize and horizontal-maximize
+       window hints with full-screen maximize.
 
