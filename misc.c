@@ -1,4 +1,4 @@
-/* $XTermId: misc.c,v 1.802 2018/05/02 21:52:03 tom Exp $ */
+/* $XTermId: misc.c,v 1.844 2018/08/12 18:25:41 tom Exp $ */
 
 /*
  * Copyright 1999-2017,2018 by Thomas E. Dickey
@@ -761,6 +761,8 @@ init_colored_cursor(Display *dpy)
 		xterm_cursor_theme = filename;
 	    }
 #endif
+	    if (xterm_cursor_theme != filename)
+		free(filename);
 	    /*
 	     * Actually, Xcursor does what _we_ want just by steering its
 	     * search path away from home.  We are setting up the complete
@@ -1129,6 +1131,7 @@ AtomBell(XtermWidget xw, int which)
 	    DATA(MinorError),
 	    DATA(TerminalBell)
     };
+#undef DATA
     Cardinal n;
     Atom result = None;
 
@@ -2009,7 +2012,7 @@ xtermResetIds(TScreen *screen)
 
 #ifdef ALLOWLOGFILEEXEC
 static void
-logpipe(int sig GCC_UNUSED)
+handle_SIGPIPE(int sig GCC_UNUSED)
 {
     XtermWidget xw = term;
     TScreen *screen = TScreenOf(xw);
@@ -2021,12 +2024,140 @@ logpipe(int sig GCC_UNUSED)
     if (screen->logging)
 	CloseLog(xw);
 }
+
+/*
+ * Open a command to pipe log data to it.
+ * Warning, enabling this "feature" allows arbitrary programs
+ * to be run.  If ALLOWLOGFILECHANGES is enabled, this can be
+ * done through escape sequences....  You have been warned.
+ */
+static void
+StartLogExec(TScreen *screen)
+{
+    int pid;
+    int p[2];
+    static char *shell;
+    struct passwd pw;
+
+    if ((shell = x_getenv("SHELL")) == NULL) {
+
+	if (x_getpwuid(screen->uid, &pw)) {
+	    char *name = x_getlogin(screen->uid, &pw);
+	    if (*(pw.pw_shell)) {
+		shell = pw.pw_shell;
+	    }
+	    free(name);
+	}
+    }
+
+    if (shell == 0) {
+	static char dummy[] = "/bin/sh";
+	shell = dummy;
+    }
+
+    if (access(shell, X_OK) != 0) {
+	xtermPerror("Can't execute `%s'\n", shell);
+	return;
+    }
+
+    if (pipe(p) < 0) {
+	xtermPerror("Can't make a pipe connection\n");
+	return;
+    } else if ((pid = fork()) < 0) {
+	xtermPerror("Can't fork...\n");
+	return;
+    }
+    if (pid == 0) {		/* child */
+	/*
+	 * Close our output (we won't be talking back to the
+	 * parent), and redirect our child's output to the
+	 * original stderr.
+	 */
+	close(p[1]);
+	dup2(p[0], 0);
+	close(p[0]);
+	dup2(fileno(stderr), 1);
+	dup2(fileno(stderr), 2);
+
+	close(fileno(stderr));
+	close(ConnectionNumber(screen->display));
+	close(screen->respond);
+
+	signal(SIGHUP, SIG_DFL);
+	signal(SIGCHLD, SIG_DFL);
+
+	/* (this is redundant) */
+	if (xtermResetIds(screen) < 0)
+	    exit(ERROR_SETUID);
+
+	if (access(shell, X_OK) == 0) {
+	    execl(shell, shell, "-c", &screen->logfile[1], (void *) 0);
+	    xtermWarning("Can't exec `%s'\n", &screen->logfile[1]);
+	} else {
+	    xtermWarning("Can't execute `%s'\n", shell);
+	}
+	exit(ERROR_LOGEXEC);
+    }
+    close(p[0]);
+    screen->logfd = p[1];
+    signal(SIGPIPE, handle_SIGPIPE);
+}
 #endif /* ALLOWLOGFILEEXEC */
+
+/*
+ * Generate a path for a logfile if no default path is given.
+ */
+static char *
+GenerateLogPath(void)
+{
+    static char *log_default = NULL;
+
+    /* once opened we just reuse the same log name */
+    if (log_default)
+	return (log_default);
+
+#if defined(HAVE_GETHOSTNAME) && defined(HAVE_STRFTIME)
+    {
+#define LEN_HOSTNAME 255
+	/* Internet standard limit (RFC 1035):  ``To simplify implementations,
+	 * the total length of a domain name (i.e., label octets and label
+	 * length octets) is restricted to 255 octets or less.''
+	 */
+#define LEN_GETPID 9
+	/*
+	 * This is arbitrary...
+	 */
+	const char form[] = "Xterm.log.%s%s.%lu";
+	char where[LEN_HOSTNAME + 1];
+	char when[LEN_TIMESTAMP];
+	time_t now = time((time_t *) 0);
+	struct tm *ltm = (struct tm *) localtime(&now);
+
+	if ((gethostname(where, sizeof(where)) == 0) &&
+	    (strftime(when, sizeof(when), FMT_TIMESTAMP, ltm) > 0) &&
+	    ((log_default = (char *) malloc((sizeof(form)
+					     + strlen(where)
+					     + strlen(when)
+					     + LEN_GETPID))) != NULL)) {
+	    (void) sprintf(log_default,
+			   form,
+			   where, when,
+			   ((unsigned long) getpid()) % ((unsigned long) 1e10));
+	}
+    }
+#else
+    static const char log_def_name[] = "XtermLog.XXXXXX";
+    if ((log_default = x_strdup(log_def_name)) != NULL) {
+	mktemp(log_default);
+    }
+#endif
+
+    return (log_default);
+}
 
 void
 StartLog(XtermWidget xw)
 {
-    static char *log_default;
     TScreen *screen = TScreenOf(xw);
 
     if (screen->logging || (screen->inhibit & I_LOG))
@@ -2038,129 +2169,30 @@ StartLog(XtermWidget xw)
     if (screen->logfd < 0)
 	return;			/* open failed */
 #else /*VMS */
-    if (screen->logfile == NULL || *screen->logfile == 0) {
-	if (screen->logfile)
-	    free(screen->logfile);
-	if (log_default == NULL) {
-#if defined(HAVE_GETHOSTNAME) && defined(HAVE_STRFTIME)
-	    const char form[] = "Xterm.log.%s%s.%d";
-	    char where[255 + 1];	/* Internet standard limit (RFC 1035):
-					   ``To simplify implementations, the
-					   total length of a domain name (i.e.,
-					   label octets and label length
-					   octets) is restricted to 255 octets
-					   or less.'' */
-	    char when[LEN_TIMESTAMP];
-	    char formatted[sizeof(form) + sizeof(where) + sizeof(when) + 9];
-	    time_t now;
-	    struct tm *ltm;
 
-	    now = time((time_t *) 0);
-	    ltm = (struct tm *) localtime(&now);
-	    if ((gethostname(where, sizeof(where)) == 0) &&
-		(strftime(when, sizeof(when), FMT_TIMESTAMP, ltm) > 0)) {
-		(void) sprintf(formatted, form, where, when, (int) getpid());
-	    } else {
-		return;
-	    }
-	    if ((log_default = x_strdup(formatted)) == NULL) {
-		return;
-	    }
-#else
-	    static const char log_def_name[] = "XtermLog.XXXXXX";
-	    if ((log_default = x_strdup(log_def_name)) == NULL) {
-		return;
-	    }
-	    mktemp(log_default);
-#endif
-	}
-	if ((screen->logfile = x_strdup(log_default)) == 0)
-	    return;
-    }
+    /* if we weren't supplied with a logfile path, generate one */
+    if (IsEmpty(screen->logfile))
+	screen->logfile = GenerateLogPath();
+
+    /* give up if we were unable to allocate the filename */
+    if (!screen->logfile)
+	return;
+
     if (*screen->logfile == '|') {	/* exec command */
 #ifdef ALLOWLOGFILEEXEC
-	/*
-	 * Warning, enabling this "feature" allows arbitrary programs
-	 * to be run.  If ALLOWLOGFILECHANGES is enabled, this can be
-	 * done through escape sequences....  You have been warned.
-	 */
-	int pid;
-	int p[2];
-	static char *shell;
-	struct passwd pw;
-
-	if ((shell = x_getenv("SHELL")) == NULL) {
-
-	    if (x_getpwuid(screen->uid, &pw)) {
-		char *name = x_getlogin(screen->uid, &pw);
-		if (*(pw.pw_shell)) {
-		    shell = pw.pw_shell;
-		}
-		free(name);
-	    }
-	}
-
-	if (shell == 0) {
-	    static char dummy[] = "/bin/sh";
-	    shell = dummy;
-	}
-
-	if (access(shell, X_OK) != 0) {
-	    xtermPerror("Can't execute `%s'\n", shell);
-	    return;
-	}
-
-	if (pipe(p) < 0) {
-	    xtermPerror("Can't make a pipe connection\n");
-	    return;
-	} else if ((pid = fork()) < 0) {
-	    xtermPerror("Can't fork...\n");
-	    return;
-	}
-	if (pid == 0) {		/* child */
-	    /*
-	     * Close our output (we won't be talking back to the
-	     * parent), and redirect our child's output to the
-	     * original stderr.
-	     */
-	    close(p[1]);
-	    dup2(p[0], 0);
-	    close(p[0]);
-	    dup2(fileno(stderr), 1);
-	    dup2(fileno(stderr), 2);
-
-	    close(fileno(stderr));
-	    close(ConnectionNumber(screen->display));
-	    close(screen->respond);
-
-	    signal(SIGHUP, SIG_DFL);
-	    signal(SIGCHLD, SIG_DFL);
-
-	    /* (this is redundant) */
-	    if (xtermResetIds(screen) < 0)
-		exit(ERROR_SETUID);
-
-	    if (access(shell, X_OK) == 0) {
-		execl(shell, shell, "-c", &screen->logfile[1], (void *) 0);
-		xtermWarning("Can't exec `%s'\n", &screen->logfile[1]);
-	    } else {
-		xtermWarning("Can't execute `%s'\n", shell);
-	    }
-	    exit(ERROR_LOGEXEC);
-	}
-	close(p[0]);
-	screen->logfd = p[1];
-	signal(SIGPIPE, logpipe);
+	StartLogExec(screen);
 #else
 	Bell(xw, XkbBI_Info, 0);
 	Bell(xw, XkbBI_Info, 0);
 	return;
 #endif
+    } else if (strcmp(screen->logfile, "-") == 0) {
+	screen->logfd = STDOUT_FILENO;
     } else {
 	if ((screen->logfd = open_userfile(screen->uid,
 					   screen->gid,
 					   screen->logfile,
-					   (log_default != 0))) < 0)
+					   True)) < 0)
 	    return;
     }
 #endif /*VMS */
@@ -2223,6 +2255,18 @@ maskToShift(unsigned long mask)
     return result;
 }
 
+static unsigned
+maskToWidth(unsigned long mask)
+{
+    unsigned result = 0;
+    while (mask != 0) {
+	if ((mask & 1) != 0)
+	    ++result;
+	mask >>= 1;
+    }
+    return result;
+}
+
 int
 getVisualInfo(XtermWidget xw)
 {
@@ -2252,6 +2296,9 @@ rgb masks (%04lx/%04lx/%04lx)\n"
 
 	if ((xw->visInfo != 0) && (xw->numVisuals > 0)) {
 	    XVisualInfo *vi = xw->visInfo;
+	    xw->rgb_widths[0] = maskToWidth(vi->red_mask);
+	    xw->rgb_widths[1] = maskToWidth(vi->green_mask);
+	    xw->rgb_widths[2] = maskToWidth(vi->blue_mask);
 	    xw->rgb_shifts[0] = maskToShift(vi->red_mask);
 	    xw->rgb_shifts[1] = maskToShift(vi->green_mask);
 	    xw->rgb_shifts[2] = maskToShift(vi->blue_mask);
@@ -3023,6 +3070,10 @@ xtermFormatSGR(XtermWidget xw, char *target, unsigned attr, int fg, int bg)
 	    sprintf(EndOf(msg), ";%d%d", bg2SGR(bg));
 	}
     });
+#else
+    (void) screen;
+    (void) fg;
+    (void) bg;
 #endif
     return target;
 }
@@ -4037,6 +4088,7 @@ parse_decudk(XtermWidget xw, const char *cp)
 		free(xw->work.user_keys[key].str);
 	    xw->work.user_keys[key].str = str;
 	    xw->work.user_keys[key].len = len;
+	    TRACE(("parse_decudk %d:%.*s\n", key, len, str));
 	} else {
 	    free(str);
 	}
@@ -4204,6 +4256,155 @@ parse_decdld(ANSI *params, const char *string)
 #define parse_decdld(p,q)	/* nothing */
 #endif
 
+#if OPT_DEC_RECTOPS
+static const char *
+skip_params(const char *cp)
+{
+    while (*cp == ';' || (*cp >= '0' && *cp <= '9'))
+	++cp;
+    return cp;
+}
+
+static int
+parse_int_param(const char **cp)
+{
+    int result = 0;
+    const char *s = *cp;
+    while (*s != '\0') {
+	if (*s == ';') {
+	    ++s;
+	    break;
+	} else if (*s >= '0' && *s <= '9') {
+	    result = (result * 10) + (*s++ - '0');
+	} else {
+	    s += strlen(s);
+	}
+    }
+    TRACE(("parse-int %s ->%d, %#x->%s\n", *cp, result, result, s));
+    *cp = s;
+    return result;
+}
+
+static int
+parse_chr_param(const char **cp)
+{
+    int result = 0;
+    const char *s = *cp;
+    if (*s != '\0') {
+	if ((result = CharOf(*s++)) != 0) {
+	    if (*s == ';') {
+		++s;
+	    } else if (*s != '\0') {
+		result = 0;
+	    }
+	}
+    }
+    TRACE(("parse-chr %s ->%d, %#x->%s\n", *cp, result, result, s));
+    *cp = s;
+    return result;
+}
+
+static void
+restore_DECCIR(XtermWidget xw, const char *cp)
+{
+    TScreen *screen = TScreenOf(xw);
+    int value;
+
+    /* row */
+    if ((value = parse_int_param(&cp)) <= 0 || value > MaxRows(screen))
+	return;
+    screen->cur_row = (value - 1);
+
+    /* column */
+    if ((value = parse_int_param(&cp)) <= 0 || value > MaxCols(screen))
+	return;
+    screen->cur_col = (value - 1);
+
+    /* page */
+    if ((value = parse_int_param(&cp)) != 1)
+	return;
+
+    /* rendition */
+    if (((value = parse_chr_param(&cp)) & 0xf0) != 0x40)
+	return;
+    UIntClr(xw->flags, (INVERSE | BLINK | UNDERLINE | BOLD));
+    xw->flags |= (value & 8) ? INVERSE : 0;
+    xw->flags |= (value & 4) ? BLINK : 0;
+    xw->flags |= (value & 2) ? UNDERLINE : 0;
+    xw->flags |= (value & 1) ? BOLD : 0;
+
+    /* attributes */
+    if (((value = parse_chr_param(&cp)) & 0xfe) != 0x40)
+	return;
+    screen->protected_mode &= ~DEC_PROTECT;
+    screen->protected_mode |= (value & 1) ? DEC_PROTECT : 0;
+
+    /* flags */
+    if (((value = parse_chr_param(&cp)) & 0xf0) != 0x40)
+	return;
+    screen->do_wrap = (value & 8) ? True : False;
+    screen->curss = (Char) ((value & 4) ? 3 : ((value & 2) ? 2 : 0));
+    UIntClr(xw->flags, ORIGIN);
+    xw->flags |= (value & 1) ? ORIGIN : 0;
+
+    if ((value = parse_chr_param(&cp)) < '0' || value > '3')
+	return;
+    screen->curgl = (Char) (value - '0');
+
+    if ((value = parse_chr_param(&cp)) < '0' || value > '3')
+	return;
+    screen->curgr = (Char) (value - '0');
+
+    /* character-set size */
+    if ((value = parse_chr_param(&cp)) != 0x4f)		/* works for xterm */
+	return;
+
+    /* SCS designators */
+    for (value = 0; value < 4; ++value) {
+	if (*cp == '%') {
+	    xtermDecodeSCS(xw, value, '%', *++cp);
+	} else if (*cp != '\0') {
+	    xtermDecodeSCS(xw, value, '\0', *cp);
+	} else {
+	    return;
+	}
+	cp++;
+    }
+
+    TRACE(("...done DECCIR\n"));
+}
+
+static void
+restore_DECTABSR(XtermWidget xw, const char *cp)
+{
+    int stop = 0;
+    Bool fail = False;
+
+    TabZonk(xw->tabs);
+    while (*cp != '\0' && !fail) {
+	if ((*cp) >= '0' && (*cp) <= '9') {
+	    stop = (stop * 10) + ((*cp) - '0');
+	} else if (*cp == '/') {
+	    --stop;
+	    if (OkTAB(stop)) {
+		TabSet(xw->tabs, stop);
+		stop = 0;
+	    } else {
+		fail = True;
+	    }
+	} else {
+	    fail = True;
+	}
+	++cp;
+    }
+    --stop;
+    if (OkTAB(stop))
+	TabSet(xw->tabs, stop);
+
+    TRACE(("...done DECTABSR\n"));
+}
+#endif
+
 void
 do_dcs(XtermWidget xw, Char *dcsbuf, size_t dcslen)
 {
@@ -4212,6 +4413,9 @@ do_dcs(XtermWidget xw, Char *dcsbuf, size_t dcslen)
     const char *cp = (const char *) dcsbuf;
     Bool okay;
     ANSI params;
+#if OPT_DEC_RECTOPS
+    char psarg = '0';
+#endif
 
     TRACE(("do_dcs(%s:%lu)\n", (char *) dcsbuf, (unsigned long) dcslen));
 
@@ -4224,7 +4428,9 @@ do_dcs(XtermWidget xw, Char *dcsbuf, size_t dcslen)
 	okay = True;
 
 	cp++;
-	if (*cp++ == 'q') {
+	if (*cp == 'q') {
+	    *reply = '\0';
+	    cp++;
 	    if (!strcmp(cp, "\"q")) {	/* DECSCA */
 		TRACE(("DECRQSS -> DECSCA\n"));
 		sprintf(reply, "%d%s",
@@ -4275,6 +4481,21 @@ do_dcs(XtermWidget xw, Char *dcsbuf, size_t dcslen)
 #endif
 		TRACE(("reply DECSCUSR\n"));
 		sprintf(reply, "%d%s", code, cp);
+	    } else if (!strcmp(cp, "t")) {	/* DECSLPP */
+		sprintf(reply, "%d%s",
+			((screen->max_row > 24) ? screen->max_row : 24),
+			cp);
+		TRACE(("reply DECSLPP\n"));
+	    } else if (!strcmp(cp, "$|")) {	/* DECSCPP */
+		TRACE(("reply DECSCPP\n"));
+		sprintf(reply, "%d%s",
+			((xw->flags & IN132COLUMNS) ? 132 : 80),
+			cp);
+	    } else if (!strcmp(cp, "*|")) {	/* DECSNLS */
+		TRACE(("reply DECSNLS\n"));
+		sprintf(reply, "%d%s",
+			screen->max_row + 1,
+			cp);
 	    } else {
 		okay = False;
 	    }
@@ -4333,6 +4554,25 @@ do_dcs(XtermWidget xw, Char *dcsbuf, size_t dcslen)
 			if (code == XK_COLORS) {
 			    unparseputn(xw, NUM_ANSI_COLORS);
 			} else
+#if OPT_DIRECT_COLOR
+			if (code == XK_RGB) {
+			    if (TScreenOf(xw)->direct_color && xw->has_rgb) {
+				if (xw->rgb_widths[0] == xw->rgb_widths[1] &&
+				    xw->rgb_widths[1] == xw->rgb_widths[2]) {
+				    unparseputn(xw, xw->rgb_widths[0]);
+				} else {
+				    char temp[1024];
+				    sprintf(temp, "%d/%d/%d",
+					    xw->rgb_widths[0],
+					    xw->rgb_widths[1],
+					    xw->rgb_widths[2]);
+				    unparseputs(xw, temp);
+				}
+			    } else {
+				unparseputs(xw, "-1");
+			    }
+			} else
+#endif
 #endif
 			if (code == XK_TCAPNAME) {
 			    unparseputs(xw, resource.term_name);
@@ -4359,6 +4599,30 @@ do_dcs(XtermWidget xw, Char *dcsbuf, size_t dcslen)
 	}
 	break;
 #endif
+#if OPT_DEC_RECTOPS
+    case '1':
+	/* FALLTHRU */
+    case '2':
+	if (*skip_params(cp) == '$') {
+	    psarg = *cp++;
+	    if ((*cp++ == '$')
+		&& (*cp++ == 't')
+		&& (screen->vtXX_level >= 3)) {
+		switch (psarg) {
+		case '1':
+		    TRACE(("DECRSPS (DECCIR)\n"));
+		    restore_DECCIR(xw, cp);
+		    break;
+		case '2':
+		    TRACE(("DECRSPS (DECTABSR)\n"));
+		    restore_DECTABSR(xw, cp);
+		    break;
+		}
+	    }
+	    break;
+	}
+#endif
+	/* FALLTHRU */
     default:
 	if (screen->terminal_id == 125 ||
 	    screen->vtXX_level >= 2) {	/* VT220 */
@@ -4613,6 +4877,10 @@ do_dec_rqm(XtermWidget xw, int nparams, int *params)
 	case srm_ALLOWLOGGING:	/* logging              */
 #ifdef ALLOWLOGFILEONOFF
 	    result = MdBool(screen->logging);
+#else
+	    result = ((MdBool(screen->logging) == mdMaybeSet)
+		      ? mdAlwaysSet
+		      : mdAlwaysReset);
 #endif /* ALLOWLOGFILEONOFF */
 	    break;
 #endif
@@ -4799,11 +5067,15 @@ do_dec_rqm(XtermWidget xw, int nparams, int *params)
 char *
 udk_lookup(XtermWidget xw, int keycode, int *len)
 {
+    char *result = NULL;
     if (keycode >= 0 && keycode < MAX_UDK) {
 	*len = xw->work.user_keys[keycode].len;
-	return xw->work.user_keys[keycode].str;
+	result = xw->work.user_keys[keycode].str;
+	TRACE(("udk_lookup(%d) = %.*s\n", keycode, *len, result));
+    } else {
+	TRACE(("udk_lookup(%d) = <null>\n", keycode));
     }
-    return 0;
+    return result;
 }
 
 #if OPT_REPORT_ICONS
@@ -5856,6 +6128,7 @@ end_vt_mode(void)
 
     if (!TEK4014_ACTIVE(xw)) {
 	FlushLog(xw);
+	set_tek_visibility(True);
 	TEK4014_ACTIVE(xw) = True;
 	TekSetWinSize(tekWidget);
 	longjmp(VTend, 1);
@@ -6385,3 +6658,218 @@ xtermSetWinSize(XtermWidget xw)
 			   Width(screen));
 	}
 }
+
+#if OPT_XTERM_SGR
+
+#if OPT_TRACE
+static char *
+traceIFlags(IFlags flags)
+{
+    static char result[1000];
+    result[0] = '\0';
+#define DATA(name) if (flags & name) { strcat(result, " " #name); }
+    DATA(INVERSE);
+    DATA(UNDERLINE);
+    DATA(BOLD);
+    DATA(BLINK);
+    DATA(INVISIBLE);
+    DATA(BG_COLOR);
+    DATA(FG_COLOR);
+
+#if OPT_WIDE_ATTRS
+    DATA(ATR_FAINT);
+    DATA(ATR_ITALIC);
+    DATA(ATR_STRIKEOUT);
+    DATA(ATR_DBL_UNDER);
+    DATA(ATR_DIRECT_FG);
+    DATA(ATR_DIRECT_BG);
+#endif
+#undef DATA
+    return result;
+}
+
+static char *
+traceIStack(unsigned flags)
+{
+    static char result[1000];
+    result[0] = '\0';
+#define DATA(name) if (flags & xBIT(ps##name - 1)) { strcat(result, " " #name); }
+    DATA(INVERSE);
+    DATA(UNDERLINE);
+    DATA(BOLD);
+    DATA(BLINK);
+    DATA(INVISIBLE);
+#if OPT_ISO_COLORS
+    DATA(BG_COLOR);
+    DATA(FG_COLOR);
+#endif
+
+#if OPT_WIDE_ATTRS
+    DATA(ATR_FAINT);
+    DATA(ATR_ITALIC);
+    DATA(ATR_STRIKEOUT);
+    DATA(ATR_DBL_UNDER);
+#if OPT_DIRECT_COLOR
+    DATA(ATR_DIRECT_FG);	/* FIXME - integrate with FG_COLOR */
+    DATA(ATR_DIRECT_BG);	/* FIXME - integrate with BG_COLOR */
+#endif
+#endif
+#undef DATA
+    return result;
+}
+#endif
+
+void
+xtermPushSGR(XtermWidget xw, int value)
+{
+    SavedSGR *s = &(xw->saved_sgr);
+
+    TRACE(("xtermPushSGR %d mask %#x %s\n",
+	   s->used + 1, (unsigned) value, traceIStack((unsigned) value)));
+
+    if (s->used < MAX_SAVED_SGR) {
+	s->stack[s->used].mask = (IFlags) value;
+#define PUSH_FLAG(name) \
+	    s->stack[s->used].name = xw->name;\
+	    TRACE(("...may pop %s 0x%04X %s\n", #name, xw->name, traceIFlags(xw->name)))
+#define PUSH_DATA(name) \
+	    s->stack[s->used].name = xw->name;\
+	    TRACE(("...may pop %s %d\n", #name, xw->name))
+	PUSH_FLAG(flags);
+#if OPT_ISO_COLORS
+	PUSH_DATA(sgr_foreground);
+	PUSH_DATA(sgr_background);
+#endif
+    }
+    s->used++;
+}
+
+#define IAttrClr(dst,bits) dst = dst & (IAttr) ~(bits)
+
+void
+xtermReportSGR(XtermWidget xw, XTermRect *value)
+{
+    TScreen *screen = TScreenOf(xw);
+    char reply[BUFSIZ];
+    CellData working;
+    int row, col;
+    Boolean first = True;
+
+    TRACE(("xtermReportSGR %d,%d - %d,%d\n",
+	   value->top, value->left,
+	   value->bottom, value->right));
+
+    memset(&working, 0, sizeof(working));
+    for (row = value->top - 1; row < value->bottom; ++row) {
+	LineData *ld = getLineData(screen, row);
+	if (ld == 0)
+	    continue;
+	for (col = value->left - 1; col < value->right; ++col) {
+	    if (first) {
+		first = False;
+		saveCellData(screen, &working, 0, ld, col);
+	    }
+	    working.attribs &= ld->attribs[col];
+#if OPT_ISO_COLORS
+	    if (working.attribs & FG_COLOR
+		&& GetCellColorFG(working.color)
+		!= GetCellColorFG(ld->color[col])) {
+		IAttrClr(working.attribs, FG_COLOR);
+	    }
+	    if (working.attribs & BG_COLOR
+		&& GetCellColorBG(working.color)
+		!= GetCellColorBG(ld->color[col])) {
+		IAttrClr(working.attribs, BG_COLOR);
+	    }
+#endif
+	}
+    }
+    xtermFormatSGR(xw, reply,
+		   working.attribs,
+		   GetCellColorFG(working.color),
+		   GetCellColorBG(working.color));
+    unparseputc1(xw, ANSI_CSI);
+    unparseputs(xw, reply);
+    unparseputc(xw, 'm');
+    unparse_end(xw);
+}
+
+void
+xtermPopSGR(XtermWidget xw)
+{
+    SavedSGR *s = &(xw->saved_sgr);
+
+    TRACE(("xtermPopSGR %d\n", s->used));
+
+    if (s->used > 0) {
+	if (s->used-- <= MAX_SAVED_SGR) {
+	    IFlags mask = s->stack[s->used].mask;
+	    Boolean changed = False;
+
+	    TRACE(("...mask  %#x %s\n", mask, traceIStack(mask)));
+	    TRACE(("...old:  %s\n", traceIFlags(xw->flags)));
+	    TRACE(("...new:  %s\n", traceIFlags(s->stack[s->used].flags)));
+#define POP_FLAG(name) \
+	    if (xBIT(ps##name - 1) & mask) { \
+	    	if ((xw->flags & name) ^ (s->stack[s->used].flags & name)) { \
+		    changed = True; \
+		    UIntClr(xw->flags, name); \
+		    UIntSet(xw->flags, (s->stack[s->used].flags & name)); \
+		    TRACE(("...pop " #name " = %s\n", BtoS(xw->flags & name))); \
+		} \
+	    }
+#define POP_DATA(name,value) \
+	    if (xBIT(ps##name - 1) & mask) { \
+	        Bool always = False; \
+	    	if ((xw->flags & name) ^ (s->stack[s->used].flags & name)) { \
+		    always = changed = True; \
+		    UIntClr(xw->flags, name); \
+		    UIntSet(xw->flags, (s->stack[s->used].flags & name)); \
+		    TRACE(("...pop " #name " = %s\n", BtoS(xw->flags & name))); \
+		} \
+		if (always || (xw->value != s->stack[s->used].value)) { \
+		    TRACE(("...pop " #name " %d => %d\n", xw->value, s->stack[s->used].value)); \
+		    xw->value = s->stack[s->used].value; \
+		    changed = True; \
+		} \
+	    }
+	    POP_FLAG(BOLD);
+	    POP_FLAG(UNDERLINE);
+	    POP_FLAG(BLINK);
+	    POP_FLAG(INVERSE);
+	    POP_FLAG(INVISIBLE);
+#if OPT_WIDE_ATTRS
+	    if (xBIT(psATR_ITALIC - 1) & mask) {
+		xtermUpdateItalics(xw, s->stack[s->used].flags, xw->flags);
+	    }
+	    POP_FLAG(ATR_ITALIC);
+	    POP_FLAG(ATR_FAINT);
+	    POP_FLAG(ATR_STRIKEOUT);
+	    POP_FLAG(ATR_DBL_UNDER);
+#endif
+#if OPT_ISO_COLORS
+	    POP_DATA(FG_COLOR, sgr_foreground);
+	    POP_DATA(BG_COLOR, sgr_background);
+#if OPT_DIRECT_COLOR
+	    POP_FLAG(ATR_DIRECT_FG);
+	    POP_FLAG(ATR_DIRECT_BG);
+#endif
+	    if (changed) {
+		setExtendedColors(xw);
+	    }
+#else
+	    (void) changed;
+#endif
+	}
+#if OPT_ISO_COLORS
+	TRACE(("xtermP -> flags%s, fg=%d bg=%d\n",
+	       traceIFlags(xw->flags),
+	       xw->sgr_foreground,
+	       xw->sgr_background));
+#else
+	TRACE(("xtermP -> flags%s\n",
+	       traceIFlags(xw->flags)));
+#endif
+    }
+}
+#endif /* OPT_XTERM_SGR */

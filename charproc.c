@@ -1,4 +1,4 @@
-/* $XTermId: charproc.c,v 1.1545 2018/05/02 21:51:17 tom Exp $ */
+/* $XTermId: charproc.c,v 1.1579 2018/08/14 00:01:50 tom Exp $ */
 
 /*
  * Copyright 1999-2017,2018 by Thomas E. Dickey
@@ -441,6 +441,7 @@ static XtResource xterm_resources[] =
     Bres(XtNbrokenSelections, XtCBrokenSelections, screen.brokenSelections, False),
     Bres(XtNc132, XtCC132, screen.c132, False),
     Bres(XtNcdXtraScroll, XtCCdXtraScroll, misc.cdXtraScroll, False),
+    Bres(XtNcolorInnerBorder, XtCColorInnerBorder, misc.color_inner_border, False),
     Bres(XtNcurses, XtCCurses, screen.curses, False),
     Bres(XtNcutNewline, XtCCutNewline, screen.cutNewline, True),
     Bres(XtNcutToBeginningOfLine, XtCCutToBeginningOfLine,
@@ -1107,6 +1108,13 @@ setExtendedBG(XtermWidget xw)
     SGR_Background(xw, bg);
 }
 
+void
+setExtendedColors(XtermWidget xw)
+{
+    setExtendedFG(xw);
+    setExtendedBG(xw);
+}
+
 static void
 reset_SGR_Foreground(XtermWidget xw)
 {
@@ -1362,6 +1370,9 @@ static const struct {
 	,DATA(vt52_esc_table)
 	,DATA(vt52_ignore_table)
 #endif
+#if OPT_XTERM_SGR
+	,DATA(csi_hash_table)
+#endif
 #undef DATA
 };
 
@@ -1422,6 +1433,90 @@ check_tables(void)
 		    ;
 		} else {
 		    TRACE(("  %3d: %d vs %d\n", ch, st_l, st_r));
+		}
+	    }
+	}
+    }
+}
+
+static void
+check_bitmasks(void)
+{
+#define dMSK 0x100
+#define DATA(mode,name) { mode, name, #name }
+#define DMSK(what) (dMSK | (what))
+#define DGRP(offs) (1 << ((offs) - 1))
+    static struct {
+	int mode;
+	int code;
+	Const char *name;
+    } table[] = {
+	DATA(DGRP(1), INVERSE),
+	    DATA(DGRP(1), UNDERLINE),
+	    DATA(DGRP(1), BOLD),
+	    DATA(DGRP(1), BLINK),
+	    DATA(DMSK(DGRP(1)), SGR_MASK),
+	    DATA(DGRP(2), BG_COLOR),
+	    DATA(DGRP(2), FG_COLOR),
+	    DATA(DGRP(2), PROTECTED),
+	    DATA(DGRP(4), CHARDRAWN),
+#if OPT_WIDE_ATTRS
+	    DATA(DGRP(2), ATR_FAINT),
+	    DATA(DGRP(2), ATR_ITALIC),
+	    DATA(DGRP(2), ATR_STRIKEOUT),
+	    DATA(DGRP(2), ATR_DBL_UNDER),
+	    DATA(DGRP(2), ATR_DIRECT_FG),
+	    DATA(DGRP(2), ATR_DIRECT_BG),
+#endif
+	    DATA(DMSK(DGRP(2)), SGR_MASK2),
+	    DATA(DGRP(3), WRAPAROUND),
+	    DATA(DGRP(3), REVERSEWRAP),
+	    DATA(DGRP(3), REVERSE_VIDEO),
+	    DATA(DGRP(3), LINEFEED),
+	    DATA(DGRP(3), ORIGIN),
+	    DATA(DGRP(3), INSERT),
+	    DATA(DGRP(3), SMOOTHSCROLL),
+	    DATA(DGRP(3), IN132COLUMNS),
+	    DATA(DGRP(3), INVISIBLE),
+	    DATA(DMSK(DGRP(3)), ATTRIBUTES),
+	    DATA(DGRP(5), NATIONAL),
+	    DATA(DGRP(5), LEFT_RIGHT),
+	    DATA(DGRP(5), NOCLEAR_COLM),
+	    DATA(DGRP(4), NOBACKGROUND),
+	    DATA(DGRP(4), NOTRANSLATION),
+	    DATA(DGRP(4), DOUBLEWFONT),
+	    DATA(DGRP(4), DOUBLEHFONT),
+	    DATA(DGRP(4), CHARBYCHAR),
+	    DATA(DGRP(4), NORESOLUTION),
+	    DATA(DMSK(DGRP(1) | DGRP(2) | DGRP(4)), DRAWX_MASK),
+	    DATA(-1, EOF)
+    };
+#undef DATA
+    int j, k;
+    TRACE(("** check_bitmasks:\n"));
+    for (j = 0; table[j].mode >= 0; ++j) {
+	TRACE(("%4X %8X %s\n", table[j].mode, table[j].code, table[j].name));
+	if (table[j].mode & dMSK) {
+	    int mask = dMSK;
+	    for (k = 0; table[k].mode >= 0; ++k) {
+		if (j == k)
+		    continue;
+		if (table[k].mode & dMSK)
+		    continue;
+		if ((table[j].mode & table[k].mode) != 0)
+		    mask |= table[k].mode;
+	    }
+	    if (mask != table[j].mode) {
+		TRACE(("...expected %08X\n", mask));
+	    }
+	} else {
+	    for (k = 0; table[k].mode >= 0; ++k) {
+		if (j == k)
+		    continue;
+		if (table[k].mode & dMSK)
+		    continue;
+		if ((table[j].code & table[k].code) != 0) {
+		    TRACE(("...same bits %s\n", table[k].name));
 		}
 	    }
 	}
@@ -1544,77 +1639,97 @@ select_charset(struct ParseState *sp, int type, int size)
 	sp->parsestate = scs96table;
     }
 }
-
-static void
-decode_scs(XtermWidget xw, int which, int prefix, int suffix)
-{
-    /* *INDENT-OFF* */
-    static struct {
-	DECNRCM_codes result;
-	int prefix;
-	int suffix;
-	int min_level;
-	int max_level;
-	int need_nrc;
-    } table[] = {
-	{ nrc_ASCII,             0,   'B', 1, 9, 0 },
-	{ nrc_British,           0,   'A', 1, 9, 0 },
-	{ nrc_DEC_Spec_Graphic,  0,   '0', 1, 9, 0 },
-	{ nrc_DEC_Alt_Chars,     0,   '1', 1, 1, 0 },
-	{ nrc_DEC_Alt_Graphics,  0,   '2', 1, 1, 0 },
-	/* VT2xx */
-	{ nrc_DEC_Supp,          0,   '<', 2, 9, 0 },
-	{ nrc_Dutch,             0,   '4', 2, 9, 1 },
-	{ nrc_Finnish,           0,   '5', 2, 9, 1 },
-	{ nrc_Finnish2,          0,   'C', 2, 9, 1 },
-	{ nrc_French,            0,   'R', 2, 9, 1 },
-	{ nrc_French2,           0,   'f', 2, 9, 1 },
-	{ nrc_French_Canadian,   0,   'Q', 2, 9, 1 },
-	{ nrc_German,            0,   'K', 2, 9, 1 },
-	{ nrc_Italian,           0,   'Y', 2, 9, 1 },
-	{ nrc_Norwegian_Danish2, 0,   'E', 2, 9, 1 },
-	{ nrc_Norwegian_Danish3, 0,   '6', 2, 9, 1 },
-	{ nrc_Spanish,           0,   'Z', 2, 9, 1 },
-	{ nrc_Swedish,           0,   '7', 2, 9, 1 },
-	{ nrc_Swedish2,          0,   'H', 2, 9, 1 },
-	{ nrc_Swiss,             0,   '=', 2, 9, 1 },
-	/* VT3xx */
-	{ nrc_British_Latin_1,   0,   'A', 3, 9, 1 },
-	{ nrc_DEC_Supp_Graphic,  '%', '5', 3, 9, 0 },
-	{ nrc_DEC_Technical,     0,   '>', 3, 9, 0 },
-	{ nrc_French_Canadian2,  0,   '9', 3, 9, 1 },
-	{ nrc_Norwegian_Danish,  0,   '`', 3, 9, 1 },
-	{ nrc_Portugese,         '%', '6', 3, 9, 1 },
+/* *INDENT-OFF* */
+static struct {
+    DECNRCM_codes result;
+    int prefix;
+    int suffix;
+    int min_level;
+    int max_level;
+    int need_nrc;
+} scs_table[] = {
+    { nrc_ASCII,             0,   'B', 1, 9, 0 },
+    { nrc_British,           0,   'A', 1, 9, 0 },
+    { nrc_DEC_Spec_Graphic,  0,   '0', 1, 9, 0 },
+    { nrc_DEC_Alt_Chars,     0,   '1', 1, 1, 0 },
+    { nrc_DEC_Alt_Graphics,  0,   '2', 1, 1, 0 },
+    /* VT2xx */
+    { nrc_DEC_Supp,          0,   '<', 2, 9, 0 },
+    { nrc_Dutch,             0,   '4', 2, 9, 1 },
+    { nrc_Finnish,           0,   '5', 2, 9, 1 },
+    { nrc_Finnish2,          0,   'C', 2, 9, 1 },
+    { nrc_French,            0,   'R', 2, 9, 1 },
+    { nrc_French2,           0,   'f', 2, 9, 1 },
+    { nrc_French_Canadian,   0,   'Q', 2, 9, 1 },
+    { nrc_German,            0,   'K', 2, 9, 1 },
+    { nrc_Italian,           0,   'Y', 2, 9, 1 },
+    { nrc_Norwegian_Danish2, 0,   'E', 2, 9, 1 },
+    { nrc_Norwegian_Danish3, 0,   '6', 2, 9, 1 },
+    { nrc_Spanish,           0,   'Z', 2, 9, 1 },
+    { nrc_Swedish,           0,   '7', 2, 9, 1 },
+    { nrc_Swedish2,          0,   'H', 2, 9, 1 },
+    { nrc_Swiss,             0,   '=', 2, 9, 1 },
+    /* VT3xx */
+    { nrc_British_Latin_1,   0,   'A', 3, 9, 1 },
+    { nrc_DEC_Supp_Graphic,  '%', '5', 3, 9, 0 },
+    { nrc_DEC_Technical,     0,   '>', 3, 9, 0 },
+    { nrc_French_Canadian2,  0,   '9', 3, 9, 1 },
+    { nrc_Norwegian_Danish,  0,   '`', 3, 9, 1 },
+    { nrc_Portugese,         '%', '6', 3, 9, 1 },
 #if 0
-	/* VT5xx (not implemented) */
-	{ nrc_Cyrillic,          '&', '4', 5, 9, 0 },
-	{ nrc_Greek,             '"', '?', 5, 9, 0 },
-	{ nrc_Greek_Supp,        0,   'F', 5, 9, 0 },
-	{ nrc_Hebrew,            '"', '4', 5, 9, 0 },
-	{ nrc_Hebrew2,           '%', '=', 5, 9, 1 },
-	{ nrc_Hebrew_Supp,       0,   'H', 5, 9, 0 },
-	{ nrc_Latin_5_Supp,      0,   'M', 5, 9, 0 },
-	{ nrc_Latin_Cyrillic,    0,   'L', 5, 9, 0 },
-	{ nrc_Russian,           '&', '5', 5, 9, 1 },
-	{ nrc_SCS_NRCS,          '%', '3', 5, 9, 0 },
-	{ nrc_Turkish,           '%', '0', 5, 9, 0 },
-	{ nrc_Turkish2,		 '%', '2', 5, 9, 1 },
+    /* VT5xx (not implemented) */
+    { nrc_Cyrillic,          '&', '4', 5, 9, 0 },
+    { nrc_Greek,             '"', '?', 5, 9, 0 },
+    { nrc_Greek_Supp,        0,   'F', 5, 9, 0 },
+    { nrc_Hebrew,            '"', '4', 5, 9, 0 },
+    { nrc_Hebrew2,           '%', '=', 5, 9, 1 },
+    { nrc_Hebrew_Supp,       0,   'H', 5, 9, 0 },
+    { nrc_Latin_5_Supp,      0,   'M', 5, 9, 0 },
+    { nrc_Latin_Cyrillic,    0,   'L', 5, 9, 0 },
+    { nrc_Russian,           '&', '5', 5, 9, 1 },
+    { nrc_SCS_NRCS,          '%', '3', 5, 9, 0 },
+    { nrc_Turkish,           '%', '0', 5, 9, 0 },
+    { nrc_Turkish2,	     '%', '2', 5, 9, 1 },
 #endif
-    };
-    /* *INDENT-ON* */
+};
+/* *INDENT-ON* */
 
+#if OPT_DEC_RECTOPS
+static char *
+encode_scs(DECNRCM_codes value)
+{
+    static char buffer[3];
+    Cardinal n;
+    char *result = buffer;
+    for (n = 0; n < XtNumber(scs_table); ++n) {
+	if (scs_table[n].result == value) {
+	    if (scs_table[n].prefix)
+		*result++ = (char) scs_table[n].prefix;
+	    if (scs_table[n].suffix)
+		*result++ = (char) scs_table[n].suffix;
+	    break;
+	}
+    }
+    *result = '\0';
+    return buffer;
+}
+#endif
+
+void
+xtermDecodeSCS(XtermWidget xw, int which, int prefix, int suffix)
+{
     TScreen *screen = TScreenOf(xw);
     Cardinal n;
     DECNRCM_codes result = nrc_Unknown;
 
     suffix &= 0x7f;
-    for (n = 0; n < XtNumber(table); ++n) {
-	if (prefix == table[n].prefix
-	    && suffix == table[n].suffix
-	    && screen->vtXX_level >= table[n].min_level
-	    && screen->vtXX_level <= table[n].max_level
-	    && (table[n].need_nrc == 0 || (xw->flags & NATIONAL) != 0)) {
-	    result = table[n].result;
+    for (n = 0; n < XtNumber(scs_table); ++n) {
+	if (prefix == scs_table[n].prefix
+	    && suffix == scs_table[n].suffix
+	    && screen->vtXX_level >= scs_table[n].min_level
+	    && screen->vtXX_level <= scs_table[n].max_level
+	    && (scs_table[n].need_nrc == 0 || (xw->flags & NATIONAL) != 0)) {
+	    result = scs_table[n].result;
 	    break;
 	}
     }
@@ -1973,7 +2088,9 @@ doparsing(XtermWidget xw, unsigned c, struct ParseState *sp)
     int laststate;
     int thischar = -1;
     XTermRect myRect;
-    Boolean extended;
+#if OPT_DEC_RECTOPS
+    int thispage = 1;
+#endif
 
     do {
 #if OPT_WIDE_CHARS
@@ -1987,7 +2104,7 @@ doparsing(XtermWidget xw, unsigned c, struct ParseState *sp)
 	 */
 	if (c >= 0x300
 	    && screen->wide_chars
-	    && my_wcwidth((wchar_t) c) == 0
+	    && CharWidth(c) == 0
 	    && !isWideControl(c)) {
 	    int prev, test;
 	    Boolean used = True;
@@ -2012,9 +2129,9 @@ doparsing(XtermWidget xw, unsigned c, struct ParseState *sp)
 		prev = (int) XTERM_CELL(use_row, use_col);
 		test = do_precomposition(prev, (int) c);
 		TRACE(("do_precomposition (U+%04X [%d], U+%04X [%d]) -> U+%04X [%d]\n",
-		       prev, my_wcwidth((wchar_t) prev),
-		       (int) c, my_wcwidth((wchar_t) c),
-		       test, my_wcwidth((wchar_t) test)));
+		       prev, CharWidth(prev),
+		       (int) c, CharWidth(c),
+		       test, CharWidth(test)));
 	    } else {
 		prev = -1;
 		test = -1;
@@ -2024,7 +2141,7 @@ doparsing(XtermWidget xw, unsigned c, struct ParseState *sp)
 	     * only if it does not change the width of the base character
 	     */
 	    if (test != -1
-		&& my_wcwidth((wchar_t) test) == my_wcwidth((wchar_t) prev)) {
+		&& CharWidth(test) == CharWidth(prev)) {
 		putXtermCell(screen, use_row, use_col, test);
 	    } else if (screen->char_was_written
 		       || getXtermCell(screen, use_row, use_col) > ' ') {
@@ -2299,6 +2416,7 @@ doparsing(XtermWidget xw, unsigned c, struct ParseState *sp)
 
 	    case CASE_CSI_DEC_DOLLAR_STATE:
 	    case CASE_CSI_DOLLAR_STATE:
+	    case CASE_CSI_HASH_STATE:
 	    case CASE_CSI_EX_STATE:
 	    case CASE_CSI_QUOTE_STATE:
 	    case CASE_CSI_SPACE_STATE:
@@ -2976,7 +3094,9 @@ doparsing(XtermWidget xw, unsigned c, struct ParseState *sp)
 			setExtendedFG(xw);
 		    });
 		    break;
-		case 5:	/* Blink                */
+		case 5:	/* Blink (less than 150 per minute) */
+		    /* FALLTHRU */
+		case 6:	/* Blink (150 per minute, or more) */
 		    UIntSet(xw->flags, BLINK);
 		    StartBlinking(screen);
 		    if_OPT_ISO_COLORS(screen, {
@@ -3075,6 +3195,7 @@ doparsing(XtermWidget xw, unsigned c, struct ParseState *sp)
 		     * properly eat all the parameters for unsupported modes.
 		     */
 		    if_OPT_ISO_COLORS(screen, {
+			Boolean extended;
 			if (parse_extended_colors(xw, &value, &item,
 						  &extended)) {
 			    xw->sgr_foreground = value;
@@ -3111,6 +3232,7 @@ doparsing(XtermWidget xw, unsigned c, struct ParseState *sp)
 		    break;
 		case 48:
 		    if_OPT_ISO_COLORS(screen, {
+			Boolean extended;
 			if (parse_extended_colors(xw, &value, &item,
 						  &extended)) {
 			    xw->sgr_background = value;
@@ -3291,7 +3413,7 @@ doparsing(XtermWidget xw, unsigned c, struct ParseState *sp)
 		if (sp->private_function
 		    && screen->vtXX_level >= 4) {	/* VT420 */
 		    init_reply(ANSI_DCS);
-		    reply.a_param[count++] = (ParmType) GetParam(1);	/* PID */
+		    reply.a_param[count++] = (ParmType) GetParam(0);	/* PID */
 		    reply.a_delim = "!~";	/* delimiter */
 		    reply.a_radix[count] = 16;	/* use hex */
 		    reply.a_param[count++] = 0;		/* no data */
@@ -3427,7 +3549,7 @@ doparsing(XtermWidget xw, unsigned c, struct ParseState *sp)
 
 	case CASE_GSETS:
 	    TRACE(("CASE_GSETS(%d) = '%c'\n", sp->scstype, c));
-	    decode_scs(xw, sp->scstype, 0, (int) c);
+	    xtermDecodeSCS(xw, sp->scstype, 0, (int) c);
 	    ResetState(sp);
 	    break;
 
@@ -4122,7 +4244,7 @@ doparsing(XtermWidget xw, unsigned c, struct ParseState *sp)
 		init_reply(ANSI_DCS);
 		count = 0;
 		checksum &= 0xffff;
-		pid = GetParam(1);
+		pid = GetParam(0);
 		reply.a_param[count++] = (ParmType) pid;
 		reply.a_delim = "!~";	/* delimiter */
 		reply.a_radix[count] = 16;
@@ -4157,9 +4279,7 @@ doparsing(XtermWidget xw, unsigned c, struct ParseState *sp)
 		value = zero_if_default(0);
 
 		TRACE(("CASE_DECFRA - Fill rectangular area\n"));
-		if (nparam > 0
-		    && ((value >= 32 && value <= 126)
-			|| (value >= 160 && value <= 255))) {
+		if (nparam > 0 && IsLatin1(value)) {
 		    xtermParseRect(xw, ParamPair(1), &myRect);
 		    ScrnFillRectangle(xw, &myRect, value, xw->flags, True);
 		}
@@ -4200,6 +4320,120 @@ doparsing(XtermWidget xw, unsigned c, struct ParseState *sp)
 	    ResetState(sp);
 	    break;
 
+	case CASE_DECSCPP:
+	    if (screen->vtXX_level >= 3) {
+		TRACE(("CASE_DECSCPP\n"));
+		/* default and 0 are "80", with "132" as the other legal choice */
+		switch (zero_if_default(0)) {
+		case 0:
+		case 80:
+		    value = 80;
+		    break;
+		case 132:
+		    value = 132;
+		    break;
+		default:
+		    value = -1;
+		    break;
+		}
+		if (value > 0) {
+		    if (screen->cur_col + 1 > value)
+			CursorSet(screen, screen->cur_row, value - 1, xw->flags);
+		    UIntClr(xw->flags, IN132COLUMNS);
+		    if (value == 132)
+			UIntSet(xw->flags, IN132COLUMNS);
+		    RequestResize(xw, -1, value, True);
+		}
+	    }
+	    ResetState(sp);
+	    break;
+
+	case CASE_DECSNLS:
+	    if (screen->vtXX_level >= 4 && AllowWindowOps(xw, ewSetWinLines)) {
+		TRACE(("CASE_DECSNLS\n"));
+		value = zero_if_default(0);
+		if (value >= 1 && value <= 255) {
+		    RequestResize(xw, value, -1, True);
+		}
+	    }
+	    ResetState(sp);
+	    break;
+
+	case CASE_DECRQPSR:
+#define reply_char(n,c) do { reply.a_radix[(n)] = 1; reply.a_param[(n)++] = (ParmType)(c); } while (0)
+#define reply_bit(n,c) ((n) ? (c) : 0)
+	    if (screen->vtXX_level >= 3) {
+		TRACE(("CASE_DECRQPSR\n"));
+		switch (GetParam(0)) {
+		case 1:
+		    TRACE(("...DECCIR\n"));
+		    init_reply(ANSI_DCS);
+		    count = 0;
+		    reply_char(count, '1');
+		    reply_char(count, '$');
+		    reply_char(count, 'u');
+		    reply.a_param[count++] = (ParmType) (screen->cur_row + 1);
+		    reply.a_param[count++] = (ParmType) (screen->cur_col + 1);
+		    reply.a_param[count++] = (ParmType) thispage;
+		    reply_char(count, ';');
+		    reply_char(count, (0x40
+				       | reply_bit(xw->flags & INVERSE, 8)
+				       | reply_bit(xw->flags & BLINK, 4)
+				       | reply_bit(xw->flags & UNDERLINE, 2)
+				       | reply_bit(xw->flags & BOLD, 1)
+			       ));
+		    reply_char(count, ';');
+		    reply_char(count, 0x40 |
+			       reply_bit(screen->protected_mode &
+					 DEC_PROTECT, 1)
+			);
+		    reply_char(count, ';');
+		    reply_char(count, (0x40
+				       | reply_bit(screen->do_wrap, 8)
+				       | reply_bit((screen->curss == 3), 4)
+				       | reply_bit((screen->curss == 2), 2)
+				       | reply_bit(xw->flags & ORIGIN, 1)
+			       ));
+		    reply_char(count, ';');
+		    reply.a_param[count++] = screen->curgl;
+		    reply.a_param[count++] = screen->curgr;
+		    reply_char(count, ';');
+		    reply_char(count, 0x4f);	/* assert all 96's */
+		    reply_char(count, ';');
+		    for (item = 0; item < 4; ++item) {
+			char *temp = encode_scs(screen->gsets[item]);
+			while (*temp != '\0') {
+			    reply_char(count, *temp++);
+			}
+		    }
+		    reply.a_nparam = (ParmType) count;
+		    unparseseq(xw, &reply);
+		    break;
+		case 2:
+		    TRACE(("...DECTABSR\n"));
+		    init_reply(ANSI_DCS);
+		    reply.a_delim = "/";
+		    count = 0;
+		    reply_char(count, '2');
+		    reply_char(count, '$');
+		    reply_char(count, 'u');
+		    for (item = 0; item < MAX_TABS; ++item) {
+			if (count + 1 >= NPARAM)
+			    break;
+			if (TabIsSet(xw->tabs, item)) {
+			    reply.a_param[count++] = (ParmType) (item + 1);
+			}
+			if (item > screen->max_col)
+			    break;
+		    }
+		    reply.a_nparam = (ParmType) count;
+		    unparseseq(xw, &reply);
+		    break;
+		}
+	    }
+	    ResetState(sp);
+	    break;
+
 	case CASE_RQM:
 	    TRACE(("CASE_RQM\n"));
 	    do_ansi_rqm(xw, ParamPair(0));
@@ -4233,6 +4467,44 @@ doparsing(XtermWidget xw, unsigned c, struct ParseState *sp)
 	    sp->parsestate = eigtable;
 	    break;
 #endif /* OPT_DEC_RECTOPS */
+
+#if OPT_XTERM_SGR
+	case CASE_CSI_HASH_STATE:
+	    TRACE(("CASE_CSI_HASH_STATE\n"));
+	    /* csi hash (#) */
+	    sp->parsestate = csi_hash_table;
+	    break;
+
+	case CASE_XTERM_PUSH_SGR:
+	    TRACE(("CASE_XTERM_PUSH_SGR\n"));
+	    value = 0;
+	    if (nparam == 0 || (nparam == 1 && GetParam(0) == DEFAULT)) {
+		value = DEFAULT;
+	    } else if (nparam > 0) {
+		for (count = 0; count < nparam; ++count) {
+		    item = zero_if_default(count);
+		    if (item > 0 && item < MAX_PUSH_SGR) {
+			value |= (1 << (item - 1));
+		    }
+		}
+	    }
+	    xtermPushSGR(xw, value);
+	    ResetState(sp);
+	    break;
+
+	case CASE_XTERM_REPORT_SGR:
+	    TRACE(("CASE_XTERM_REPORT_SGR\n"));
+	    xtermParseRect(xw, ParamPair(0), &myRect);
+	    xtermReportSGR(xw, &myRect);
+	    ResetState(sp);
+	    break;
+
+	case CASE_XTERM_POP_SGR:
+	    TRACE(("CASE_XTERM_POP_SGR\n"));
+	    xtermPopSGR(xw);
+	    ResetState(sp);
+	    break;
+#endif
 
 	case CASE_S7C1T:
 	    TRACE(("CASE_S7C1T\n"));
@@ -4369,7 +4641,7 @@ doparsing(XtermWidget xw, unsigned c, struct ParseState *sp)
 
 	case CASE_GSETS_PERCENT:
 	    TRACE(("CASE_GSETS_PERCENT(%d) = '%c'\n", sp->scstype, c));
-	    decode_scs(xw, sp->scstype, '%', (int) c);
+	    xtermDecodeSCS(xw, sp->scstype, '%', (int) c);
 	    ResetState(sp);
 	    break;
 #endif
@@ -5134,7 +5406,7 @@ dotext(XtermWidget xw,
 			   buf[n] <= 0xa0) {
 		    last_chomp = 1;
 		} else {
-		    last_chomp = my_wcwidth((wchar_t) buf[n]);
+		    last_chomp = CharWidth(buf[n]);
 		    if (last_chomp <= 0) {
 			IChar ch = buf[n];
 			Bool eat_it = (ch > 127);
@@ -5306,6 +5578,10 @@ HandleStructNotify(Widget w GCC_UNUSED,
 		   event->xconfigure.window,
 		   event->xconfigure.y, event->xconfigure.x,
 		   event->xconfigure.height, event->xconfigure.width));
+
+#if OPT_DOUBLE_BUFFER
+	    discardRenderDraw(TScreenOf(xw));
+#endif /* OPT_DOUBLE_BUFFER */
 
 #if OPT_TOOLBAR
 	    /*
@@ -7045,6 +7321,7 @@ unparseseq(XtermWidget xw, ANSI *ap)
 {
     int c;
 
+    assert(ap->a_nparam < NPARAM);
     unparseputc1(xw, c = ap->a_type);
     if (c == ANSI_ESC
 	|| c == ANSI_DCS
@@ -7055,23 +7332,31 @@ unparseseq(XtermWidget xw, ANSI *ap)
 	|| c == ANSI_SS3) {
 	int i;
 	int inters;
+	char temp[8];
 
 	if (ap->a_pintro != 0)
 	    unparseputc(xw, ap->a_pintro);
 	for (i = 0; i < ap->a_nparam; ++i) {
 	    if (i != 0) {
-		if (ap->a_delim) {
+		if (ap->a_radix[i] == 1 || ap->a_radix[i - 1] == 1) {
+		    ;
+		} else if (ap->a_delim) {
 		    unparseputs(xw, ap->a_delim);
 		} else {
 		    unparseputc(xw, ';');
 		}
 	    }
-	    if (ap->a_radix[i]) {
-		char temp[8];
+	    switch (ap->a_radix[i]) {
+	    case 16:
 		sprintf(temp, "%04X", ap->a_param[i] & 0xffff);
 		unparseputs(xw, temp);
-	    } else {
+		break;
+	    case 1:
+		unparseputc(xw, ap->a_param[i]);
+		break;
+	    default:
 		unparseputn(xw, (unsigned int) ap->a_param[i]);
+		break;
 	    }
 	}
 	if ((inters = ap->a_inters) != 0) {
@@ -7238,23 +7523,11 @@ SwitchBufs(XtermWidget xw, int toBuf, Bool clearFirst)
 	if (screen->scroll_amt) {
 	    FlushScroll(xw);
 	}
-#if OPT_DOUBLE_BUFFER
-	XFillRectangle(screen->display,
-		       VDrawable(screen),
-		       ReverseGC(xw, screen),
-		       (int) OriginX(screen),
-		       (int) top * FontHeight(screen) + screen->border,
-		       (unsigned) Width(screen),
-		       (unsigned) ((rows - top) * FontHeight(screen)));
-#else
-	XClearArea(screen->display,
-		   VWindow(screen),
-		   (int) OriginX(screen),
-		   (int) top * FontHeight(screen) + screen->border,
-		   (unsigned) Width(screen),
-		   (unsigned) ((rows - top) * FontHeight(screen)),
-		   False);
-#endif
+	xtermClear2(xw,
+		    (int) OriginX(screen),
+		    (int) top * FontHeight(screen) + screen->border,
+		    (unsigned) Width(screen),
+		    (unsigned) ((rows - top) * FontHeight(screen)));
 	if (clearFirst) {
 	    ClearBufRows(xw, top, rows);
 	}
@@ -8087,6 +8360,7 @@ VTInitialize(Widget wrequest,
     TScreen *screen = TScreenOf(wnew);
 
 #if OPT_TRACE
+    check_bitmasks();
     check_tables();
 #endif
 
@@ -8189,6 +8463,7 @@ VTInitialize(Widget wrequest,
     init_Bres(screen.cursor_blink_xor);
     init_Ires(screen.blink_on);
     init_Ires(screen.blink_off);
+    screen->cursor_blink_i = screen->cursor_blink;
 #endif
     init_Bres(screen.cursor_underline);
     /* resources allow for underline or block, not (yet) bar */
@@ -8438,6 +8713,7 @@ VTInitialize(Widget wrequest,
     init_Bres(misc.titeInhibit);
     init_Bres(misc.tiXtraScroll);
     init_Bres(misc.cdXtraScroll);
+    init_Bres(misc.color_inner_border);
     init_Bres(misc.dynamicColors);
 
 #if OPT_DEC_CHRSET
@@ -9030,14 +9306,9 @@ VTInitialize(Widget wrequest,
 #if OPT_TOOLBAR
     wnew->VT100_TB_INFO(menu_bar) = request->VT100_TB_INFO(menu_bar);
     init_Ires(VT100_TB_INFO(menu_height));
-#else
-    /* Flag icon name with "***"  on window output when iconified.
-     * Put in a handler that will tell us when we get Map/Unmap events.
-     */
-    if (resource.zIconBeep)
 #endif
-	XtAddEventHandler(my_parent, StructureNotifyMask, False,
-			  HandleStructNotify, (Opaque) 0);
+    XtAddEventHandler(my_parent, StructureNotifyMask, False,
+		      HandleStructNotify, (Opaque) 0);
 #endif /* HANDLE_STRUCT_NOTIFY */
 
     screen->bellInProgress = False;
@@ -9133,7 +9404,14 @@ releaseWindowGCs(XtermWidget xw, VTwin *win)
     int n;
 
     for_each_text_gc(n) {
-	freeCgs(xw, win, (CgsEnum) n);
+	switch (n) {
+	case gcBorder:
+	case gcFiller:
+	    break;
+	default:
+	    freeCgs(xw, win, (CgsEnum) n);
+	    break;
+	}
     }
 }
 
@@ -9279,8 +9557,7 @@ VTDestroy(Widget w GCC_UNUSED)
 	    xtermCloseXft(screen, getMyXftFont(xw, e, (int) n));
 	}
     }
-    if (screen->renderDraw)
-	XftDrawDestroy(screen->renderDraw);
+    discardRenderDraw(screen);
     {
 	ListXftFonts *p;
 	while ((p = screen->list_xft_fonts) != 0) {
@@ -9526,6 +9803,54 @@ getWindowManagerName(XtermWidget xw)
 }
 #endif
 
+void
+initBorderGC(XtermWidget xw, VTwin *win)
+{
+    TScreen *screen = TScreenOf(xw);
+#if OPT_DOUBLE_BUFFER
+    unsigned long filler;
+#endif
+
+    TRACE(("initBorderGC core %#lx, %#lx text %#lx, %#lx\n",
+	   xw->core.background_pixel,
+	   xw->core.border_pixel,
+	   T_COLOR(screen, TEXT_FG),
+	   T_COLOR(screen, TEXT_BG)));
+    if (xw->misc.color_inner_border
+	&& (xw->core.background_pixel != xw->core.border_pixel)) {
+	/*
+	 * By default, try to match the inner window's background.
+	 */
+	if ((xw->core.background_pixel == T_COLOR(screen, TEXT_BG)) &&
+	    (xw->core.border_pixel == T_COLOR(screen, TEXT_FG))) {
+	    setCgsFore(xw, win, gcBorder, T_COLOR(screen, TEXT_BG));
+	    setCgsBack(xw, win, gcBorder, T_COLOR(screen, TEXT_BG));
+	} else {
+	    setCgsFore(xw, win, gcBorder, xw->core.border_pixel);
+	    setCgsBack(xw, win, gcBorder, xw->core.border_pixel);
+	}
+	win->border_gc = getCgsGC(xw, win, gcBorder);
+    } else {
+	win->border_gc = 0;
+    }
+
+    /*
+     * Initialize a GC for double-buffering, needed for XFillRectangle call
+     * in xtermClear2().  When not double-buffering, the XClearArea call works,
+     * without requiring a separate GC.
+     */
+#if OPT_DOUBLE_BUFFER
+    filler = (((xw->flags & BG_COLOR) && (xw->cur_background >= 0))
+	      ? (unsigned long) xw->cur_background
+	      : xw->core.background_pixel);
+
+    setCgsFore(xw, win, gcFiller, filler);
+    setCgsBack(xw, win, gcFiller, filler);
+
+    win->filler_gc = getCgsGC(xw, win, gcFiller);
+#endif
+}
+
 /*ARGSUSED*/
 static void
 VTRealize(Widget w,
@@ -9589,7 +9914,7 @@ VTRealize(Widget w,
     }
 
     /* really screwed if we couldn't open default font */
-    if (!getNormalFont(screen, fNorm)->fs) {
+    if (!GetNormalFont(screen, fNorm)->fs) {
 	xtermWarning("unable to locate a suitable font\n");
 	Exit(1);
     }
@@ -9796,7 +10121,7 @@ VTRealize(Widget w,
     if (UsingRenderFont(xw)
 	&& getIconicFont(screen)->fs == 0) {
 	screen->icon_fontnum = fontMenu_default;
-	getIconicFont(screen)->fs = getNormalFont(screen, fNorm)->fs;	/* need for next-if */
+	getIconicFont(screen)->fs = GetNormalFont(screen, fNorm)->fs;	/* need for next-if */
 	ReportIcons(("using TrueType font as iconFont\n"));
     }
 #endif
@@ -9861,6 +10186,8 @@ VTRealize(Widget w,
 
 	copyCgs(xw, win, gcBoldReverse, gcNormReverse);
 
+	initBorderGC(xw, win);
+
 #if OPT_TOOLBAR
 	/*
 	 * Toolbar is initialized before we get here.  Enable the menu item
@@ -9889,6 +10216,7 @@ VTRealize(Widget w,
 #endif
 
     set_cursor_gcs(xw);
+    initBorderGC(xw, &(screen->fullVwin));
 
     /* Reset variables used by ANSI emulation. */
 
@@ -10550,6 +10878,7 @@ ShowCursor(void)
      * Compare the current cell to the last set of colors used for the
      * cursor and update the GC's if needed.
      */
+    (void) fg_bg;
     if_OPT_ISO_COLORS(screen, {
 	fg_bg = ld->color[cursor_col];
     });
@@ -11194,6 +11523,8 @@ ReallyReset(XtermWidget xw, Bool full, Bool saved)
     screen->cursor_set = ON;
     InitCursorShape(screen, screen);
 #if OPT_BLINK_CURS
+    screen->cursor_blink = screen->cursor_blink_i;
+    screen->cursor_blink_esc = 0;
     TRACE(("cursor_shape:%d blinks:%d\n",
 	   screen->cursor_shape,
 	   screen->cursor_blink));

@@ -1,4 +1,4 @@
-/* $XTermId: main.c,v 1.814 2018/04/27 22:17:23 tom Exp $ */
+/* $XTermId: main.c,v 1.820 2018/08/10 22:25:49 tom Exp $ */
 
 /*
  * Copyright 2002-2017,2018 by Thomas E. Dickey
@@ -807,7 +807,8 @@ static sigjmp_buf env;
 #define SetUtmpHost(dst, screen) \
 	{ \
 	    char host[sizeof(dst) + 1]; \
-	    strncpy(host, DisplayString(screen->display), sizeof(host)); \
+	    strncpy(host, DisplayString(screen->display), sizeof(host) - 1); \
+	    host[sizeof(dst)] = '\0'; \
 	    TRACE(("DisplayString(%s)\n", host)); \
 	    if (!resource.utmpDisplayId) { \
 		char *endptr = strrchr(host, ':'); \
@@ -837,6 +838,7 @@ static XtResource application_resources[] =
     Sres(XtNiconName, XtCIconName, icon_name, NULL),
     Sres("termName", "TermName", term_name, NULL),
     Sres("ttyModes", "TtyModes", tty_modes, NULL),
+    Sres("validShells", "ValidShells", valid_shells, NULL),
     Bres("hold", "Hold", hold_screen, False),
     Bres("utmpInhibit", "UtmpInhibit", utmpInhibit, False),
     Bres("utmpDisplayId", "UtmpDisplayId", utmpDisplayId, True),
@@ -1218,7 +1220,7 @@ static OptionHelp xtermOptions[] = {
 { "-kt keyboardtype",      "set keyboard type:" KEYBOARD_TYPES },
 #ifdef ALLOWLOGGING
 { "-/+l",                  "turn on/off logging" },
-{ "-lf filename",          "logging filename" },
+{ "-lf filename",          "logging filename (use '-' for standard out)" },
 #else
 { "-/+l",                  "turn on/off logging (not supported)" },
 { "-lf filename",          "logging filename (not supported)" },
@@ -2836,17 +2838,7 @@ get_pty(int *pty, char *from GCC_UNUSED)
     result = pty_search(pty);
 #else
 #if defined(USE_USG_PTYS) || defined(__CYGWIN__)
-#ifdef __GLIBC__		/* if __GLIBC__ and USE_USG_PTYS, we know glibc >= 2.1 */
-    /* GNU libc 2 allows us to abstract away from having to know the
-       master pty device name. */
-    if ((*pty = getpt()) >= 0) {
-	char *name = ptsname(*pty);
-	if (name != 0) {	/* if filesystem is trashed, this may be null */
-	    strcpy(ttydev, name);
-	    result = 0;
-	}
-    }
-#elif defined(__MVS__)
+#if defined(__MVS__)
     result = pty_search(pty);
 #else
     result = ((*pty = open("/dev/ptmx", O_RDWR)) < 0);
@@ -3134,6 +3126,10 @@ typedef struct {
     char buffer[1024];
 } handshake_t;
 
+/* the buffer is large enough that we can always have a trailing null */
+#define copy_handshake(dst, src) \
+	strncpy(dst.buffer, src, sizeof(dst.buffer) - 1)[sizeof(dst.buffer) - 1] = '\0'
+
 #if OPT_TRACE
 static void
 trace_handshake(const char *tag, handshake_t * data)
@@ -3194,7 +3190,7 @@ HsSysError(int error)
     handshake.status = PTY_FATALERROR;
     handshake.error = errno;
     handshake.fatal_error = error;
-    strncpy(handshake.buffer, ttydev, sizeof(handshake.buffer) - 1);
+    copy_handshake(handshake, ttydev);
 
     if (resource.ptyHandshake && (cp_pipe[1] >= 0)) {
 	TRACE(("HsSysError errno=%d, error=%d device \"%s\"\n",
@@ -3364,29 +3360,6 @@ find_utmp(struct UTMP_STR *tofind)
 #define USE_NO_DEV_TTY 0
 #endif
 
-#if defined(HAVE_GETUSERSHELL) && defined(HAVE_ENDUSERSHELL)
-static Boolean
-validShell(const char *pathname)
-{
-    Boolean result = False;
-
-    if (validProgram(pathname)) {
-	char *q;
-
-	while ((q = getusershell()) != 0) {
-	    TRACE(("...test \"%s\"\n", q));
-	    if (!strcmp(q, pathname)) {
-		result = True;
-		break;
-	    }
-	}
-	endusershell();
-    }
-
-    TRACE(("validShell %s ->%d\n", NonNull(pathname), result));
-    return result;
-}
-#else
 static int
 same_leaf(char *a, char *b)
 {
@@ -3416,53 +3389,128 @@ same_file(const char *a, const char *b)
     return result;
 }
 
+static int
+findValidShell(const char *haystack, const char *needle)
+{
+    int result = -1;
+    int count = -1;
+    const char *s, *t;
+    size_t have;
+    size_t want = strlen(needle);
+
+    TRACE(("findValidShell:\n%s\n", NonNull(haystack)));
+
+    for (s = t = haystack; (s != 0) && (*s != '\0'); s = t) {
+	++count;
+	if ((t = strchr(s, '\n')) == 0) {
+	    t = s + strlen(s);
+	}
+	have = (size_t) (t - s);
+
+	if ((have >= want) && (*s != '#')) {
+	    char *p = malloc(have + 1);
+
+	    if (p != 0) {
+		char *q;
+
+		memcpy(p, s, have);
+		p[have] = '\0';
+		if ((q = x_strtrim(p)) != 0) {
+		    TRACE(("...test %s\n", q));
+		    if (!strcmp(q, needle)) {
+			result = count;
+		    } else if (same_leaf(q, (char *) needle) &&
+			       same_file(q, needle)) {
+			result = count;
+		    }
+		    free(q);
+		}
+		free(p);
+	    }
+	    if (result >= 0)
+		break;
+	}
+	while (*t == '\n') {
+	    ++t;
+	}
+    }
+    return result;
+}
+
+static int
+ourValidShell(const char *pathname)
+{
+    return findValidShell(x_strtrim(resource.valid_shells), pathname);
+}
+
+#if defined(HAVE_GETUSERSHELL) && defined(HAVE_ENDUSERSHELL)
+static Boolean
+validShell(const char *pathname)
+{
+    int result = -1;
+
+    if (validProgram(pathname)) {
+	char *q;
+	int count = -1;
+
+	TRACE(("validShell:getusershell\n"));
+	while ((q = getusershell()) != 0) {
+	    ++count;
+	    TRACE(("...test \"%s\"\n", q));
+	    if (!strcmp(q, pathname)) {
+		result = count;
+		break;
+	    }
+	}
+	endusershell();
+
+	if (result < 0)
+	    result = ourValidShell(pathname);
+    }
+
+    TRACE(("validShell %s ->%d\n", NonNull(pathname), result));
+    return (result >= 0);
+}
+#else
 /*
  * Only set $SHELL for paths found in the standard location.
  */
 static Boolean
 validShell(const char *pathname)
 {
-    Boolean result = False;
+    int result = -1;
     const char *ok_shells = "/etc/shells";
     char *blob;
     struct stat sb;
     size_t rc;
     FILE *fp;
 
-    if (validProgram(pathname)
-	&& stat(ok_shells, &sb) == 0
-	&& (sb.st_mode & S_IFMT) == S_IFREG
-	&& ((size_t) sb.st_size > 0)
-	&& ((size_t) sb.st_size < (((size_t) ~0) - 2))
-	&& (blob = calloc((size_t) sb.st_size + 2, sizeof(char))) != 0) {
-	if ((fp = fopen(ok_shells, "r")) != 0) {
-	    rc = fread(blob, sizeof(char), (size_t) sb.st_size, fp);
-	    if (rc == (size_t) sb.st_size) {
-		char *p = blob;
-		char *q, *r;
-		blob[rc] = '\0';
-		while (!result && (q = strtok(p, "\n")) != 0) {
-		    if ((r = x_strtrim(q)) != 0) {
-			TRACE(("...test \"%s\"\n", q));
-			if (!strcmp(q, pathname)) {
-			    result = True;
-			} else if (same_leaf(q, (char *) pathname) &&
-				   same_file(q, pathname)) {
-			    result = True;
-			}
-			free(r);
-			if (result)
-			    break;
-		    }
-		    p = 0;
+    if (validProgram(pathname)) {
+
+	TRACE(("validShell:%s\n", ok_shells));
+
+	if (stat(ok_shells, &sb) == 0
+	    && (sb.st_mode & S_IFMT) == S_IFREG
+	    && ((size_t) sb.st_size > 0)
+	    && ((size_t) sb.st_size < (((size_t) ~0) - 2))
+	    && (blob = calloc((size_t) sb.st_size + 2, sizeof(char))) != 0) {
+
+	    if ((fp = fopen(ok_shells, "r")) != 0) {
+		rc = fread(blob, sizeof(char), (size_t) sb.st_size, fp);
+		fclose(fp);
+
+		if (rc == (size_t) sb.st_size) {
+		    blob[rc] = '\0';
+		    result = findValidShell(blob, pathname);
 		}
 	    }
-	    fclose(fp);
+	    free(blob);
 	}
-	free(blob);
+	if (result < 0)
+	    result = ourValidShell(pathname);
     }
     TRACE(("validShell %s ->%d\n", NonNull(pathname), result));
-    return result;
+    return (result > 0);
 }
 #endif
 
@@ -4081,7 +4129,7 @@ spawnXTerm(XtermWidget xw, unsigned line_speed)
 		    /* let our master know that the open failed */
 		    handshake.status = PTY_BAD;
 		    handshake.error = errno;
-		    strncpy(handshake.buffer, ttydev, sizeof(handshake.buffer));
+		    copy_handshake(handshake, ttydev);
 		    TRACE_HANDSHAKE("writing", &handshake);
 		    IGNORE_RC(write(cp_pipe[1],
 				    (const char *) &handshake,
@@ -4692,7 +4740,7 @@ spawnXTerm(XtermWidget xw, unsigned line_speed)
 	    if (resource.ptyHandshake) {
 		handshake.status = UTMP_ADDED;
 		handshake.error = 0;
-		strncpy(handshake.buffer, ttydev, sizeof(handshake.buffer));
+		copy_handshake(handshake, ttydev);
 		TRACE_HANDSHAKE("writing", &handshake);
 		IGNORE_RC(write(cp_pipe[1], (char *) &handshake, sizeof(handshake)));
 	    }
@@ -4726,7 +4774,7 @@ spawnXTerm(XtermWidget xw, unsigned line_speed)
 		 */
 		handshake.status = PTY_GOOD;
 		handshake.error = 0;
-		(void) strncpy(handshake.buffer, ttydev, sizeof(handshake.buffer));
+		copy_handshake(handshake, ttydev);
 		TRACE_HANDSHAKE("writing", &handshake);
 		IGNORE_RC(write(cp_pipe[1],
 				(const char *) &handshake,
@@ -4996,7 +5044,7 @@ spawnXTerm(XtermWidget xw, unsigned line_speed)
 			exit(ERROR_PTYS);
 		    }
 		    handshake.status = PTY_NEW;
-		    (void) strncpy(handshake.buffer, ttydev, sizeof(handshake.buffer));
+		    copy_handshake(handshake, ttydev);
 		    TRACE_HANDSHAKE("writing", &handshake);
 		    IGNORE_RC(write(pc_pipe[1],
 				    (const char *) &handshake,

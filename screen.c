@@ -1,4 +1,4 @@
-/* $XTermId: screen.c,v 1.527 2018/04/09 09:03:17 tom Exp $ */
+/* $XTermId: screen.c,v 1.537 2018/08/09 08:23:24 tom Exp $ */
 
 /*
  * Copyright 1999-2017,2018 by Thomas E. Dickey
@@ -151,22 +151,18 @@ traceScrnBuf(const char *tag, TScreen *screen, ScrnBuf sb, unsigned len)
 #define TRACE_SCRNBUF(tag, screen, sb, len)	/*nothing */
 #endif
 
-static unsigned
-scrnHeadSize(TScreen *screen, unsigned count)
-{
-    unsigned result = SizeOfLineData;
-
-    (void) screen;
-
 #if OPT_WIDE_CHARS
-    if (screen->wide_chars) {
-	result += (unsigned) screen->lineExtra;
-    }
+#define scrnHeadSize(screen, count) \
+	(unsigned) ((count) * \
+		    (SizeOfLineData + \
+		     ((screen)->wide_chars \
+		      ? (unsigned) (screen)->lineExtra \
+		      : 0)))
+#else
+#define scrnHeadSize(screen, count) \
+	(unsigned) ((count) * \
+		    SizeOfLineData)
 #endif
-    result *= count;
-
-    return result;
-}
 
 ScrnBuf
 scrnHeadAddr(TScreen *screen, ScrnBuf base, unsigned offset)
@@ -174,6 +170,7 @@ scrnHeadAddr(TScreen *screen, ScrnBuf base, unsigned offset)
     unsigned size = scrnHeadSize(screen, offset);
     ScrnBuf result = ScrnBufAddr(base, size);
 
+    (void) screen;
     assert((int) offset >= 0);
 
     return result;
@@ -199,6 +196,7 @@ setupLineData(TScreen *screen, ScrnBuf base, Char *data, unsigned nrow, unsigned
     unsigned skipNcolCellColor;
 #endif
 
+    (void) screen;
     AlignValue(ncol);
 
     skipNcolIAttr = (ncol * SizeofScrnPtr(attribs));
@@ -271,6 +269,7 @@ allocScrnHead(TScreen *screen, unsigned nrow)
     ScrnPtr *result;
     unsigned size = scrnHeadSize(screen, 1);
 
+    (void) screen;
     result = (ScrnPtr *) calloc((size_t) nrow, (size_t) size);
     if (result == 0)
 	SysError(ERROR_SCALLOC);
@@ -716,6 +715,19 @@ CopyCells(TScreen *screen, LineData *src, LineData *dst, int col, int len)
 	int n;
 	int last = col + len;
 
+	if_OPT_WIDE_CHARS(screen, {
+	    if (col > 0 &&
+		((dst->charData[col] == HIDDEN_CHAR) ^
+		 (src->charData[col] == HIDDEN_CHAR))) {
+		dst->charData[col - 1] = ' ';
+	    }
+	    if (last < src->lineSize &&
+		((dst->charData[last] == HIDDEN_CHAR) ^
+		 (src->charData[last] == HIDDEN_CHAR))) {
+		dst->charData[last] = ' ';
+	    }
+	});
+
 	for (n = col; n < last; ++n) {
 	    dst->charData[n] = src->charData[n];
 	    dst->attribs[n] = src->attribs[n];
@@ -758,10 +770,26 @@ ClearCells(XtermWidget xw, int flags, unsigned len, int row, int col)
 
 	ld = getLineData(screen, row);
 
+	if (((unsigned) col + len) > ld->lineSize)
+	    len = (unsigned) (ld->lineSize - col);
+
+	if_OPT_WIDE_CHARS(screen, {
+	    if (((unsigned) col + len) < ld->lineSize &&
+		ld->charData[col + (int) len] == HIDDEN_CHAR) {
+		len++;
+	    }
+	    if (col > 0 &&
+		ld->charData[col] == HIDDEN_CHAR) {
+		len++;
+		col--;
+	    }
+	});
+
 	flags = (int) ((unsigned) flags | TERM_COLOR_FLAGS(xw));
 
-	for (n = 0; n < len; ++n)
+	for (n = 0; n < len; ++n) {
 	    ld->charData[(unsigned) col + n] = (CharData) ' ';
+	}
 
 	FillIAttr(ld->attribs + col, (unsigned) flags, (size_t) len);
 
@@ -1386,20 +1414,6 @@ ShowWrapMarks(XtermWidget xw, int row, CLineData *ld)
 		   (unsigned) FontHeight(screen));
 }
 
-#if OPT_WIDE_ATTRS
-static unsigned
-refreshFontGCs(XtermWidget xw, unsigned new_attrs, unsigned old_attrs)
-{
-    if ((new_attrs & ATR_ITALIC) && !(old_attrs & ATR_ITALIC)) {
-	xtermLoadItalics(xw);
-	xtermUpdateFontGCs(xw, True);
-    } else if (!(new_attrs & ATR_ITALIC) && (old_attrs & ATR_ITALIC)) {
-	xtermUpdateFontGCs(xw, False);
-    }
-    return new_attrs;
-}
-#endif
-
 /*
  * Repaints the area enclosed by the parameters.
  * Requires: (toprow, leftcol), (toprow + nrows, leftcol + ncols) are
@@ -1620,7 +1634,7 @@ ScrnRefresh(XtermWidget xw,
 	});
 
 #if OPT_WIDE_ATTRS
-	old_attrs = refreshFontGCs(xw, flags, old_attrs);
+	old_attrs = xtermUpdateItalics(xw, flags, old_attrs);
 #endif
 	gc = updatedXtermGC(xw, flags, fg_bg, hilite);
 	gc_changes |= (flags & (FG_COLOR | BG_COLOR));
@@ -1703,7 +1717,7 @@ ScrnRefresh(XtermWidget xw,
 		});
 
 #if OPT_WIDE_ATTRS
-		old_attrs = refreshFontGCs(xw, flags, old_attrs);
+		old_attrs = xtermUpdateItalics(xw, flags, old_attrs);
 #endif
 		gc = updatedXtermGC(xw, flags, fg_bg, hilite);
 		gc_changes |= (flags & (FG_COLOR | BG_COLOR));
@@ -1767,7 +1781,7 @@ ScrnRefresh(XtermWidget xw,
      * ClearRight) will get the correct colors.
      */
 #if OPT_WIDE_ATTRS
-    (void) refreshFontGCs(xw, xw->flags, old_attrs);
+    (void) xtermUpdateItalics(xw, xw->flags, old_attrs);
 #endif
     if_OPT_ISO_COLORS(screen, {
 	if (gc_changes & FG_COLOR)
@@ -1878,30 +1892,14 @@ ScreenResize(XtermWidget xw,
 	/* clear the right and bottom internal border because of NorthWest
 	   gravity might have left junk on the right and bottom edges */
 	if (width >= (int) FullWidth(screen)) {
-#if OPT_DOUBLE_BUFFER
-	    XFillRectangle(screen->display, VDrawable(screen),
-			   ReverseGC(xw, screen),
-			   FullWidth(screen), 0,
-			   width - FullWidth(screen), height);
-#else
-	    XClearArea(screen->display, VDrawable(screen),
-		       FullWidth(screen), 0,	/* right edge */
-		       0, (unsigned) height,	/* from top to bottom */
-		       False);
-#endif
+	    xtermClear2(xw,
+			FullWidth(screen), 0,	/* right edge */
+			0, (unsigned) height);	/* from top to bottom */
 	}
 	if (height >= (int) FullHeight(screen)) {
-#if OPT_DOUBLE_BUFFER
-	    XFillRectangle(screen->display, VDrawable(screen),
-			   ReverseGC(xw, screen),
-			   0, FullHeight(screen),
-			   width, height - FullHeight(screen));
-#else
-	    XClearArea(screen->display, VDrawable(screen),
-		       0, FullHeight(screen),	/* bottom */
-		       (unsigned) width, 0,	/* all across the bottom */
-		       False);
-#endif
+	    xtermClear2(xw,
+			0, FullHeight(screen),	/* bottom */
+			(unsigned) width, 0);	/* all across the bottom */
 	}
     }
 
@@ -2324,7 +2322,7 @@ limitedParseCol(XtermWidget xw, int col)
 }
 
 #define LimitedParse(num, func, dft) \
-	func(xw, (nparams > num) ? params[num] : dft)
+	func(xw, (nparams > num && params[num] > 0) ? params[num] : dft)
 
 /*
  * Copy the rectangle boundaries into a struct, providing default values as
@@ -2743,6 +2741,8 @@ xtermCheckRect(XtermWidget xw,
 			    *result += (int) ld->combData[off][col];
 			}
 		    })
+		} else {
+		    *result += ' ';
 		}
 	    }
 	}

@@ -1,4 +1,4 @@
-/* $XTermId: button.c,v 1.529 2018/05/01 00:36:18 tom Exp $ */
+/* $XTermId: button.c,v 1.532 2018/07/07 13:25:23 tom Exp $ */
 
 /*
  * Copyright 1999-2017,2018 by Thomas E. Dickey
@@ -318,11 +318,11 @@ SendMousePosition(XtermWidget xw, XEvent *event)
 	break;
 
     case DEC_LOCATOR:
-	if (IsBtnEvent(event)) {
 #if OPT_DEC_LOCATOR
+	if (IsBtnEvent(event) || event->type == MotionNotify) {
 	    result = SendLocatorPosition(xw, my_event);
-#endif /* OPT_DEC_LOCATOR */
 	}
+#endif /* OPT_DEC_LOCATOR */
 	break;
     }
     return result;
@@ -1251,7 +1251,8 @@ UTF8toLatin1(TScreen *screen, Char *s, unsigned long len, unsigned long *result)
 	while (decodeUtf8(screen, &data)) {
 	    Bool fails = False;
 	    Bool extra = False;
-	    IChar value = skipPtyData(&data);
+	    IChar value;
+	    skipPtyData(&data, value);
 	    if (value == UCS_REPL) {
 		fails = True;
 	    } else if (value < 256) {
@@ -2850,13 +2851,7 @@ ResizeSelection(TScreen *screen GCC_UNUSED, int rows, int cols)
 }
 
 #if OPT_WIDE_CHARS
-Bool
-iswide(int i)
-{
-    return (i == HIDDEN_CHAR) || (WideCells(i) == 2);
-}
-
-#define isWideCell(row, col) iswide((int)XTERM_CELL(row, col))
+#define isWideCell(row, col) isWideFrg((int)XTERM_CELL(row, col))
 #endif
 
 static void

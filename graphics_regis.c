@@ -1,7 +1,7 @@
-/* $XTermId: graphics_regis.c,v 1.101 2017/12/30 15:06:36 tom Exp $ */
+/* $XTermId: graphics_regis.c,v 1.106 2018/08/11 14:38:58 tom Exp $ */
 
 /*
- * Copyright 2014-2016,2017 by Ross Combs
+ * Copyright 2014-2017,2018 by Ross Combs
  *
  *                         All Rights Reserved
  *
@@ -952,9 +952,9 @@ plotQuadBezierSeg(int x0, int y0, int x1, int y1, int x2, int y2)
 	double dx, dy, err;
 
 	xx += sx;
-	xx *= sx = x0 < x2 ? 1 : -1;	/* x step direction */
+	xx *= (sx = (x0 < x2) ? 1 : -1);	/* x step direction */
 	yy += sy;
-	yy *= sy = y0 < y2 ? 1 : -1;	/* y step direction */
+	yy *= (sy = (y0 < y2) ? 1 : -1);	/* y step direction */
 	xy = 2 * xx * yy;
 	xx *= xx;
 	yy *= yy;		/* differences 2nd degree */
@@ -1836,6 +1836,7 @@ find_best_xft_font_size(XtermWidget xw,
 		    font = XftFontOpenPattern(display, match);
 		    maybeXftCache(xw, font);
 		}
+		XftPatternDestroy(pat);
 	    }
 	}
 	if (!font) {
@@ -5509,8 +5510,8 @@ parse_regis_option(RegisParseState *state, RegisGraphicsContext *context)
 			   fragment_to_tempstr(&suboptionarg)));
 		    if (!fragment_consumed(&suboptionarg)) {
 			name = pop_fragment(&suboptionarg);
-			if (islower(name))
-			    name = (char) toupper(name);
+			if (islower(CharOf(name)))
+			    name = (char) toupper(CharOf(name));
 
 			skip_regis_whitespace(&suboptionarg);
 			if (!fragment_consumed(&optionarg)) {
@@ -6662,8 +6663,8 @@ expand_macrographs(RegisDataFragment *input, RegisGraphicsContext const *context
     if (operator != '@')
 	return 0;
     name = get_fragment(input, 1U);
-    if (islower(name))
-	name = (char) toupper(name);
+    if (islower(CharOf(name)))
+	name = (char) toupper(CharOf(name));
     if (name < 'A' || name > 'Z')
 	return 0;
 
@@ -7191,8 +7192,8 @@ parse_regis_items(RegisParseState *state, RegisGraphicsContext *context)
 		int len = 0;
 
 		name = pop_fragment(input);
-		if (islower(name))
-		    name = (char) toupper(name);
+		if (islower(CharOf(name)))
+		    name = (char) toupper(CharOf(name));
 		TRACE(("defining macrograph for \"%c\"\n", name));
 		if (name < 'A' || name > 'Z') {
 		    TRACE(("DATA_ERROR: invalid macrograph name\n"));
@@ -7479,7 +7480,6 @@ parse_regis(XtermWidget xw, ANSI *params, char const *string)
 		       iterations,
 		       DiffTime(curr_tv) - DiffTime(prev_tv)));
 		context->force_refresh = 0;
-		/* FIXME: pre-ANSI compilers need memcpy() */
 		prev_tv = curr_tv;
 		iterations = 0U;
 		refresh_modified_displayed_graphics(xw);
@@ -7489,7 +7489,7 @@ parse_regis(XtermWidget xw, ANSI *params, char const *string)
 
 		    swap.swap_window = VWindow(screen);
 		    swap.swap_action = XdbeCopied;
-		    XdbeSwapBuffers(XtDisplay(term), &swap, 1);
+		    XdbeSwapBuffers(XtDisplay(xw), &swap, 1);
 		    XFlush(XtDisplay(xw));
 		}
 #endif

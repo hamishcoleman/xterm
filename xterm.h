@@ -1,4 +1,4 @@
-/* $XTermId: xterm.h,v 1.794 2018/04/29 22:17:28 tom Exp $ */
+/* $XTermId: xterm.h,v 1.805 2018/08/13 23:55:11 tom Exp $ */
 
 /*
  * Copyright 1999-2017,2018 by Thomas E. Dickey
@@ -421,6 +421,7 @@ extern char **environ;
 #define XtNcolorBDMode		"colorBDMode"
 #define XtNcolorBLMode		"colorBLMode"
 #define XtNcolorITMode		"colorITMode"
+#define XtNcolorInnerBorder	"colorInnerBorder"
 #define XtNcolorMode		"colorMode"
 #define XtNcolorRVMode		"colorRVMode"
 #define XtNcolorULMode		"colorULMode"
@@ -617,6 +618,7 @@ extern char **environ;
 #define XtCCharClass		"CharClass"
 #define XtCCjkWidth		"CjkWidth"
 #define XtCColorAttrMode	"ColorAttrMode"
+#define XtCColorInnerBorder	"ColorInnerBorder"
 #define XtCColorMode		"ColorMode"
 #define XtCColumn		"Column"
 #define XtCCombiningChars	"CombiningChars"
@@ -870,12 +872,16 @@ extern void ReadLineButton             PROTO_XT_ACTIONS_ARGS;
 extern void report_char_class(XtermWidget);
 #endif
 
+#define IsLatin1(n)  (((n) >= 32 && (n) <= 126) || ((n) >= 160 && (n) <= 255))
+
 #if OPT_WIDE_CHARS
-extern Bool iswide(int  /* i */);
 #define WideCells(n) (((IChar)(n) >= first_widechar) ? my_wcwidth((wchar_t) (n)) : 1)
-#define isWide(n)    (((IChar)(n) >= first_widechar) && iswide(n))
+#define isWideFrg(n) (((n) == HIDDEN_CHAR) || (WideCells((n)) == 2))
+#define isWide(n)    (((IChar)(n) >= first_widechar) && isWideFrg(n))
+#define CharWidth(n) (((n) < 256) ? (IsLatin1(n) ? 1 : 0) : my_wcwidth((wchar_t) (n)))
 #else
 #define WideCells(n) 1
+#define CharWidth(n) (IsLatin1(n) ? 1 : 0)
 #endif
 
 /* cachedCgs.c */
@@ -913,6 +919,7 @@ extern void VTReset (XtermWidget /* xw */, int /* full */, int /* saved */) GCC_
 extern void VTRun (XtermWidget /* xw */);
 extern void dotext (XtermWidget /* xw */, int  /* charset */, IChar * /* buf */, Cardinal  /* len */);
 extern void getKeymapResources(Widget /* w */, const char * /*mapName */, const char * /* mapClass */, const char * /* type */, void * /* result */, size_t /* size */);
+extern void initBorderGC (XtermWidget /* xw */, VTwin * /* win */);
 extern void lookupSelectUnit(XtermWidget /* xw */, Cardinal /* item */, String /* value */);
 extern void releaseCursorGCs(XtermWidget /*xw*/);
 extern void releaseWindowGCs(XtermWidget /*xw*/, VTwin * /*win*/);
@@ -928,7 +935,8 @@ extern void unparseputn (XtermWidget /* xw */, unsigned /* n */);
 extern void unparseputs (XtermWidget /* xw */, const char * /* s */);
 extern void unparseseq (XtermWidget /* xw */, ANSI * /* ap */);
 extern void v_write (int  /* f */, const Char * /* d */, unsigned  /* len */);
-extern void xtermAddInput(Widget  /* w */);
+extern void xtermAddInput (Widget  /* w */);
+extern void xtermDecodeSCS (XtermWidget /* xw */, int /* which */, int /* prefix */, int /* suffix */);
 
 #if OPT_BLINK_CURS
 extern void ToggleCursorBlink(TScreen * /* screen */);
@@ -945,6 +953,7 @@ extern TInput *lookupTInput (XtermWidget /* xw */, Widget /* w */);
 #if OPT_ISO_COLORS
 extern void SGR_Background (XtermWidget /* xw */, int  /* color */);
 extern void SGR_Foreground (XtermWidget /* xw */, int  /* color */);
+extern void setExtendedColors (XtermWidget /* xw */);
 #endif
 
 #ifdef NO_LEAKS
@@ -1191,6 +1200,12 @@ extern Bool xtermEnvUTF8(void);
 #define xtermEnvUTF8() False
 #endif
 
+#if OPT_XTERM_SGR
+extern void xtermPushSGR (XtermWidget /* xw */, int /* value */);
+extern void xtermReportSGR (XtermWidget /* xw */, XTermRect * /* value */);
+extern void xtermPopSGR (XtermWidget /* xw */);
+#endif
+
 #ifdef ALLOWLOGGING
 extern void StartLog (XtermWidget /* xw */);
 extern void CloseLog (XtermWidget /* xw */);
@@ -1238,17 +1253,23 @@ extern void noleaks_ptydata ( void );
 #if OPT_WIDE_CHARS
 extern Char *convertToUTF8 (Char * /* lp */, unsigned  /* c */);
 extern IChar nextPtyData (TScreen * /* screen */, PtyData * /* data */);
-extern IChar skipPtyData (PtyData * /* data */);
 extern PtyData * fakePtyData(PtyData * /* result */, Char * /* next */, Char * /* last */);
 extern void switchPtyData (TScreen * /* screen */, int  /* f */);
 extern void writePtyData (int  /* f */, IChar * /* d */, unsigned  /* len */);
 
-#define morePtyData(screen,data) \
+#define morePtyData(screen, data) \
 	(((data)->last > (data)->next) \
 	 ? (((screen)->utf8_inparse && !(data)->utf_size) \
 	    ? decodeUtf8(screen, data) \
 	    : True) \
 	 : False)
+
+#define skipPtyData(data, result) \
+	do { \
+	    result = (data)->utf_data; \
+	    (data)->next += (data)->utf_size; \
+	    (data)->utf_size = 0; \
+	} while (0)
 #else
 #define morePtyData(screen, data) ((data)->last > (data)->next)
 #define nextPtyData(screen, data) (IChar) (*((data)->next++) & \
@@ -1385,10 +1406,11 @@ extern void updateRightScrollbar(XtermWidget  /* xw */);
 /* tabs.c */
 extern Bool TabToNextStop (XtermWidget /* xw */);
 extern Bool TabToPrevStop (XtermWidget /* xw */);
-extern void TabClear (Tabs  /* tabs */, int  /* col */);
-extern void TabReset (Tabs  /* tabs */);
-extern void TabSet (Tabs  /* tabs */, int  /* col */);
-extern void TabZonk (Tabs  /* tabs */);
+extern void TabClear (Tabs /* tabs */, int /* col */);
+extern void TabReset (Tabs /* tabs */);
+extern void TabSet (Tabs /* tabs */, int /* col */);
+extern void TabZonk (Tabs /* tabs */);
+extern Bool TabIsSet(Tabs /* tabs */, int /* col */);
 
 /* util.c */
 extern Boolean isDefaultBackground(const char * /* name */);
@@ -1428,6 +1450,7 @@ extern void set_keyboard_type (XtermWidget /* xw */, xtermKeyboardType  /* type 
 extern void toggle_keyboard_type (XtermWidget /* xw */, xtermKeyboardType  /* type */);
 extern void update_keyboard_type (void);
 extern void xtermClear (XtermWidget /* xw */);
+extern void xtermClear2 (XtermWidget /* xw */, int /* x */, int /* y */, unsigned /* width */, unsigned /* height */);
 extern void xtermColIndex (XtermWidget /* xw */, Bool /* toLeft */);
 extern void xtermColScroll (XtermWidget /* xw */, int /* amount */, Bool /* toLeft */, int /* at_col */);
 extern void xtermRepaint (XtermWidget /* xw */);
@@ -1471,6 +1494,12 @@ extern Pixel xtermGetColorRes(XtermWidget /* xw */, ColorRes * /* res */);
 
 #define ExtractForeground(color) (unsigned) GetCellColorFG(color)
 #define ExtractBackground(color) (unsigned) GetCellColorBG(color)
+
+#if OPT_RENDERFONT
+extern void discardRenderDraw(TScreen * /* screen */);
+#else
+#define discardRenderDraw(screen) /* nothing */
+#endif
 
 #if OPT_WIDE_ATTRS
 #define MapToWideColorMode(fg, screen, flags) \

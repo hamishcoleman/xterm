@@ -1,34 +1,8 @@
 The NEWS file was generated from xterm.log.html, which serves as the changelog
 for xterm.
 --------------------------------------------------------------------------------
-                            Patch #333 - 2018/05/03
+                            Patch #335 - 2018/08/14
 
-     * ensure that i18n is enabled if input-method is enabled.
-     * modify  logic for pre-edit to update spot-location while the cursor
-       is invisible (Kakoune #1940).
-     * change default icon to newer one, "mini.xterm".
-     * install   a   complete  set  of  icons,  to  simplify  post-install
-       customization.
-     * add resource disallowedPasteControls to extend filtering of control
-       characters from pastes.
-     * add  print-on-error  action-hook,  and  document  action-hooks  for
-       dump-html, dump-svg.
-     * provide  action-hook  for print-immediate, which was available only
-       as a menu-item (report by Rastislav Barlik).
-     * continue to improve notes in ctlseqs.ms which mention where various
-       controls originated.
-     * add  case  to  accept ECMA-48's bogus SD, but document the issue in
-       ctlseqs.ms.
-     * add control sequence for loading XPM-icon file, using the analogous
-       control sequence from shelltool/dtterm.
-     * add  -report-icons  option,  to  report  on  XPM-icon and title-bar
-       updates.
-     * correct a discrepancy between locator-reports for VT220 vs VT330.
-     * add  window-ops  control  sequences to complement existing ones for
-       reporting  window-position  and  text-area  size  with  reports for
-       text-area position and window-size.
-     * display vt52 graphics mode characters.
-     * correct  case-statement  for  window-ops  10, overlooked since some
-       window  managers  equate  vertical-maximize and horizontal-maximize
-       window hints with full-screen maximize.
+     * add  colorInnerBorder  resource  to  make  a change from patch #334
+       configurable (reports by H Merijn Brand, Gabriele Balducci).
 

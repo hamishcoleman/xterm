@@ -1,4 +1,4 @@
-/* $XTermId: ptyx.h,v 1.887 2018/05/02 21:52:26 tom Exp $ */
+/* $XTermId: ptyx.h,v 1.906 2018/08/13 23:55:47 tom Exp $ */
 
 /*
  * Copyright 1999-2017,2018 by Thomas E. Dickey
@@ -799,6 +799,10 @@ typedef struct {
 #define OPT_XMC_GLITCH	0 /* true if xterm supports xmc (magic cookie glitch) */
 #endif
 
+#ifndef OPT_XTERM_SGR
+#define OPT_XTERM_SGR   1 /* true if xterm supports private SGR controls */
+#endif
+
 #ifndef OPT_ZICONBEEP
 #define OPT_ZICONBEEP   1 /* true if xterm supports "-ziconbeep" option */
 #endif
@@ -889,6 +893,8 @@ typedef enum {
     , gcBold
     , gcNormReverse
     , gcBoldReverse
+    , gcFiller
+    , gcBorder
 #if OPT_BOX_CHARS
     , gcLine
     , gcDots
@@ -1213,6 +1219,39 @@ typedef enum {
     , epLAST
 } PasteControls;
 
+/*
+ * xterm uses these codes for the its push-SGR feature.  They match where
+ * possible the corresponding SGR coding.  The foreground and background colors
+ * do not fit into that scheme (because they are a set of ranges), so those are
+ * chosen arbitrarily -TD
+ */
+typedef enum {
+    psBOLD = 1
+#if OPT_WIDE_ATTRS
+    , psATR_FAINT = 2
+    , psATR_ITALIC = 3
+#endif
+    , psUNDERLINE = 4
+    , psBLINK = 5
+    , psINVERSE = 7
+    , psINVISIBLE = 8
+#if OPT_WIDE_ATTRS
+    , psATR_STRIKEOUT = 9
+#endif
+#if OPT_ISO_COLORS
+    , psFG_COLOR = 10
+    , psBG_COLOR = 11
+#endif
+#if OPT_WIDE_ATTRS
+#if OPT_DIRECT_COLOR
+    , psATR_DIRECT_FG = 12
+    , psATR_DIRECT_BG = 13
+#endif
+    , psATR_DBL_UNDER = 21
+#endif
+    , MAX_PUSH_SGR
+} PushSGR;
+
 typedef enum {
     etSetTcap = 1
     , etGetTcap
@@ -1257,6 +1296,8 @@ typedef enum {
     /* get the size of the array... */
     , ewLAST
 } WindowOps;
+
+/***====================================================================***/
 
 #define	COLOR_DEFINED(s,w)	((s)->which & (unsigned) (1<<(w)))
 #define	COLOR_VALUE(s,w)	((s)->colors[w])
@@ -1329,12 +1370,6 @@ typedef enum {
 		      (( (flags & INVERSE) && !hilite) || \
 		       (!(flags & INVERSE) &&  hilite)) ))
 
-/* Define a fake XK code, we need it for the fake color response in
- * xtermcapKeycode(). */
-#if OPT_TCAP_QUERY && OPT_ISO_COLORS
-# define XK_COLORS 0x0003
-#endif
-
 #else	/* !OPT_ISO_COLORS */
 
 #define TERM_COLOR_FLAGS(xw) 0
@@ -1346,7 +1381,16 @@ typedef enum {
 
 #endif	/* OPT_ISO_COLORS */
 
-# define XK_TCAPNAME 0x0004
+typedef enum {
+	XK_TCAPNAME = 3
+	/* Define fake XK codes, we need those for the fake color response in
+	 * xtermcapKeycode().
+	 */
+#if OPT_ISO_COLORS
+	, XK_COLORS
+	, XK_RGB
+#endif
+} TcapQuery;
 
 #if OPT_AIX_COLORS
 #define if_OPT_AIX_COLORS(screen, code) if(screen->colorMode) code
@@ -1637,7 +1681,7 @@ typedef unsigned CellColor;
 #define hasDirectBG(flags)	((flags) & ATR_DIRECT_BG)
 #define setDirectFG(flags,test)	if (test) UIntSet(flags, ATR_DIRECT_FG); else UIntClr(flags, ATR_DIRECT_BG)
 #define setDirectBG(flags,test)	if (test) UIntSet(flags, ATR_DIRECT_BG); else UIntClr(flags, ATR_DIRECT_BG)
-#else
+#elif OPT_ISO_COLORS
 #define clrDirectFG(flags)	/* nothing */
 #define clrDirectBG(flags)	/* nothing */
 #define GetCellColorFG(data)	((data) & COLOR_MASK)
@@ -1646,6 +1690,9 @@ typedef unsigned CellColor;
 #define hasDirectBG(flags)	0
 #define setDirectFG(flags,test)	(void)(test)
 #define setDirectBG(flags,test)	(void)(test)
+#else
+#define GetCellColorFG(data)	7
+#define GetCellColorBG(data)	0
 #endif
 extern CellColor blank_cell_color;
 
@@ -1975,6 +2022,8 @@ typedef struct {
 	int		f_ascent;	/* ascent of font in pixels	*/
 	int		f_descent;	/* descent of font in pixels	*/
 	SbInfo		sb_info;
+	GC		filler_gc;	/* filler's fg/bg		*/
+	GC		border_gc;	/* inner border's fg/bg		*/
 #if OPT_DOUBLE_BUFFER
 	Drawable	drawable;	/* X drawable id                */
 #endif
@@ -2301,6 +2350,7 @@ typedef struct {
 	XtCursorShape	cursor_shape;
 #if OPT_BLINK_CURS
 	BlinkOps	cursor_blink;	/* cursor blink enable		*/
+	BlinkOps	cursor_blink_i;	/* save cursor blink enable	*/
 	char *		cursor_blink_s;	/* ...resource cursorBlink	*/
 	int		cursor_blink_esc; /* cursor blink escape-state	*/
 	Boolean		cursor_blink_xor; /* how to merge menu/escapes	*/
@@ -2814,6 +2864,7 @@ typedef struct _Misc {
 #ifdef ALLOWLOGGING
     Boolean log_on;
 #endif
+    Boolean color_inner_border;
     Boolean login_shell;
     Boolean re_verse;
     Boolean re_verse0;		/* initial value of "-rv" */
@@ -2955,7 +3006,24 @@ extern WidgetClass tekWidgetClass;
 #define TAB_ARRAY_SIZE	(1024 / TAB_BITS_WIDTH)
 #define MAX_TABS	(TAB_BITS_WIDTH * TAB_ARRAY_SIZE)
 
+#define OkTAB(c)	((c) >= 0 && (c) < MAX_TABS)
+
 typedef unsigned Tabs [TAB_ARRAY_SIZE];
+
+#if OPT_XTERM_SGR
+#define MAX_SAVED_SGR	10
+typedef	struct {
+    int		used;
+    struct	{
+	IFlags	mask;
+	IFlags	flags;
+#if OPT_ISO_COLORS
+	int	sgr_foreground;
+	int	sgr_background;
+#endif
+    } stack[MAX_SAVED_SGR];
+} SavedSGR;
+#endif
 
 typedef struct _XtermWidgetRec {
     CorePart	core;
@@ -2963,6 +3031,7 @@ typedef struct _XtermWidgetRec {
     XVisualInfo *visInfo;
     int		numVisuals;
     unsigned	rgb_shifts[3];
+    unsigned	rgb_widths[3];
     Bool	has_rgb;
     Bool	init_menu;
     TKeyboard	keyboard;	/* terminal keyboard		*/
@@ -2982,6 +3051,9 @@ typedef struct _XtermWidgetRec {
     Tabs	tabs;		/* tabstops of the terminal	*/
     Misc	misc;		/* miscellaneous parameters	*/
     Work	work;		/* workspace (no resources)	*/
+#if OPT_XTERM_SGR
+    SavedSGR	saved_sgr;
+#endif
 } XtermWidgetRec, *XtermWidget;
 
 #if OPT_TEK4014
@@ -3100,7 +3172,7 @@ typedef struct _TekWidgetRec {
 /* set when the line contains blinking text.
  */
 
-#if OPT_ZICONBEEP || OPT_TOOLBAR
+#if OPT_ZICONBEEP || OPT_TOOLBAR || (OPT_DOUBLE_BUFFER && OPT_RENDERFONT)
 #define HANDLE_STRUCT_NOTIFY 1
 #else
 #define HANDLE_STRUCT_NOTIFY 0
@@ -3151,7 +3223,7 @@ typedef struct _TekWidgetRec {
 #define WhichTWin(screen)	((screen)->whichTwin)
 
 #define WhichVFont(screen,name)	(IsIcon(screen) ? getIconicFont(screen) \
-						: getNormalFont(screen, name))->fs
+						: getNormalFont(screen, (int)(name)))->fs
 #define FontAscent(screen)	(IsIcon(screen) ? getIconicFont(screen)->fs->ascent \
 						: WhichVWin(screen)->f_ascent)
 #define FontDescent(screen)	(IsIcon(screen) ? getIconicFont(screen)->fs->descent \
@@ -3185,7 +3257,7 @@ typedef struct _TekWidgetRec {
 #define TShellWindow		XtWindow(SHELL_OF(tekWidget))
 
 #if OPT_DOUBLE_BUFFER
-#define VDrawable(screen)	(((screen)->needSwap=1), WhichVWin(screen)->drawable)
+extern Window VDrawable(TScreen * /* screen */);
 #else
 #define VDrawable(screen)	VWindow(screen)
 #endif
@@ -3207,6 +3279,8 @@ typedef struct _TekWidgetRec {
 
 #define ScrollbarWidth(screen)	WhichVWin(screen)->sb_info.width
 
+#define BorderGC(w,sp)		WhichVWin(sp)->border_gc
+#define FillerGC(w,sp)		WhichVWin(sp)->filler_gc
 #define NormalGC(w,sp)		getCgsGC(w, WhichVWin(sp), gcNorm)
 #define ReverseGC(w,sp)		getCgsGC(w, WhichVWin(sp), gcNormReverse)
 #define NormalBoldGC(w,sp)	getCgsGC(w, WhichVWin(sp), gcBold)

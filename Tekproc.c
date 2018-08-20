@@ -1,7 +1,7 @@
-/* $XTermId: Tekproc.c,v 1.229 2017/05/29 23:19:34 tom Exp $ */
+/* $XTermId: Tekproc.c,v 1.232 2018/06/25 20:14:43 tom Exp $ */
 
 /*
- * Copyright 2001-2016,2017 by Thomas E. Dickey
+ * Copyright 2001-2017,2018 by Thomas E. Dickey
  *
  *                         All Rights Reserved
  *
@@ -157,7 +157,7 @@
 #define	ScaledX(tw,x)	(((x) * ScaleOf(tw)) + BorderOf(tw))
 #define	ScaledY(tw,y)	((BottomY(y) * ScaleOf(tw)) + BorderOf(tw))
 
-#define	TekMove(tw,x,y)	tekscr->cur_X = x; tekscr->cur_Y = y
+#define	TekMove(tw,x,y)	do { tekscr->cur_X = x; tekscr->cur_Y = y; } while (0)
 #define	input()		Tinput(tw)
 #define	unput(c)	*Tpushback++ = (Char) c
 /* *INDENT-OFF* */
@@ -1956,6 +1956,18 @@ TCursorToggle(TekWidget tw, int toggle)		/* TOGGLE or CLEAR */
     }
 }
 
+/*
+ * The Tektronix manual describes the PAGE/RESET button.  For PAGE:
+ *	Erases the display, resets to Alpha Mode and home position;
+ *	resets to Margin 1 and cancels Bypass condition.
+ * For the RESET function:
+ *	Entered with SHIFT held down; creates a "home" function,
+ *	resetting the Terminal to initial status; does not erase.
+ *
+ * The reset done here is different, changing the modes (which changes
+ * the line-type and font to default values) as well as erasing the screen
+ * (like PAGE).
+ */
 void
 TekSimulatePageButton(TekWidget tw, Bool reset)
 {
