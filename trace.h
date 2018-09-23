@@ -1,7 +1,7 @@
-/* $XTermId: trace.h,v 1.81 2017/11/07 00:12:24 tom Exp $ */
+/* $XTermId: trace.h,v 1.83 2018/09/15 20:19:38 tom Exp $ */
 
 /*
- * Copyright 1997-2016,2017 by Thomas E. Dickey
+ * Copyright 1997-2017,2018 by Thomas E. Dickey
  *
  *                         All Rights Reserved
  *
@@ -68,7 +68,7 @@ extern	const char * visibleDblChrset(unsigned /* chrset */);
 extern	const char * visibleEventType (int);
 extern	const char * visibleNotifyDetail(int /* code */);
 extern	const char * visibleNotifyMode (int /* code */);
-extern	const char * visibleScsCode(int /* chrset */);
+extern	const char * visibleScsCode(DECNRCM_codes /* chrset */);
 extern	const char * visibleSelectionTarget(Display * /* d */, Atom /* a */);
 extern	const char * visibleTekparse (int);
 extern	const char * visibleVTparse (int);
@@ -83,6 +83,10 @@ extern	void	TraceArgv(const char * /* tag */, char ** /* argv */);
 extern	const	char *trace_who;
 #undef  TRACE_CHILD
 #define TRACE_CHILD int tracing_child = (trace_who = "child") != 0; (void) tracing_child;
+
+extern	void	TraceEvent(const char *, XEvent *, String *, Cardinal *);
+#undef  TRACE_EVENT
+#define	TRACE_EVENT(t,e,s,n) TraceEvent(t, (XEvent *)e, s, n)
 
 extern	void	TraceFocus(Widget, XEvent *);
 #undef  TRACE_FOCUS

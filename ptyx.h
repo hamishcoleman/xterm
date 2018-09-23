@@ -1,4 +1,4 @@
-/* $XTermId: ptyx.h,v 1.906 2018/08/13 23:55:47 tom Exp $ */
+/* $XTermId: ptyx.h,v 1.921 2018/09/18 00:54:13 tom Exp $ */
 
 /*
  * Copyright 1999-2017,2018 by Thomas E. Dickey
@@ -457,6 +457,17 @@ typedef struct {
 	int width;
 	int height;
 } BitmapBits;
+
+/* bit-assignments for extensions to DECRQCRA */
+typedef enum {
+    csDEC = 0
+    ,csPOSITIVE = xBIT(0)
+    ,csATTRIBS = xBIT(1)
+    ,csNOTRIM = xBIT(2)
+    ,csDRAWN = xBIT(3)
+    ,csBYTE = xBIT(4)
+    ,cs8TH = xBIT(5)
+} CSBITS;
 
 #define	SAVELINES		64      /* default # lines to save      */
 #define SCROLLLINES 1			/* default # lines to scroll    */
@@ -1008,13 +1019,14 @@ typedef enum {
     ,nrc_French_Canadian2	/* vt3xx */
     ,nrc_German			/* vt2xx */
     ,nrc_Greek			/* vt5xx */
-    ,nrc_Greek_Supp		/* vt5xx */
+    ,nrc_DEC_Greek_Supp		/* vt5xx */
+    ,nrc_ISO_Greek_Supp		/* vt5xx */
+    ,nrc_DEC_Hebrew_Supp	/* vt5xx */
     ,nrc_Hebrew			/* vt5xx */
-    ,nrc_Hebrew2		/* vt5xx */
-    ,nrc_Hebrew_Supp		/* vt5xx */
+    ,nrc_ISO_Hebrew_Supp	/* vt5xx */
     ,nrc_Italian		/* vt2xx */
-    ,nrc_Latin_5_Supp		/* vt5xx */
-    ,nrc_Latin_Cyrillic		/* vt5xx */
+    ,nrc_ISO_Latin_5_Supp	/* vt5xx */
+    ,nrc_ISO_Latin_Cyrillic	/* vt5xx */
     ,nrc_Norwegian_Danish	/* vt3xx */
     ,nrc_Norwegian_Danish2	/* vt2xx */
     ,nrc_Norwegian_Danish3	/* vt2xx */
@@ -1025,8 +1037,8 @@ typedef enum {
     ,nrc_Swedish		/* vt2xx */
     ,nrc_Swedish2		/* vt2xx */
     ,nrc_Swiss			/* vt2xx */
+    ,nrc_DEC_Turkish_Supp	/* vt5xx */
     ,nrc_Turkish		/* vt5xx */
-    ,nrc_Turkish2		/* vt5xx */
     ,nrc_Unknown
 } DECNRCM_codes;
 
@@ -1293,6 +1305,7 @@ typedef enum {
     , ewGetSelection
     , ewSetSelection
     , ewGetChecksum
+    , ewSetChecksum
     /* get the size of the array... */
     , ewLAST
 } WindowOps;
@@ -1966,6 +1979,8 @@ typedef struct {
 	char		*names[NCOLORS];
 } ScrnColors;
 
+#define NUM_GSETS 4
+
 typedef struct {
 	Boolean		saved;
 	int		row;
@@ -1973,7 +1988,7 @@ typedef struct {
 	IFlags		flags;		/* VTxxx saves graphics rendition */
 	Char		curgl;
 	Char		curgr;
-	int		gsets[4];
+	DECNRCM_codes	gsets[NUM_GSETS];
 	Boolean		wrap_flag;
 #if OPT_ISO_COLORS
 	int		cur_foreground;  /* current foreground color	*/
@@ -2161,6 +2176,8 @@ typedef struct {
 #endif
 #if OPT_DEC_RECTOPS
 	int		cur_decsace;	/* parameter for DECSACE	*/
+	int		checksum_ext;	/* extensions for DECRQCRA	*/
+	int		checksum_ext0;	/* initial checksumExtension	*/
 #endif
 #if OPT_WIDE_CHARS
 	Boolean		wide_chars;	/* true when 16-bit chars	*/
@@ -2459,7 +2476,7 @@ typedef struct {
 
 	/* Improved VT100 emulation stuff.				*/
 	String		keyboard_dialect; /* default keyboard dialect	*/
-	int		gsets[4];	/* G0 through G3.		*/
+	DECNRCM_codes	gsets[NUM_GSETS]; /* G0 through G3.		*/
 	Char		curgl;		/* Current GL setting.		*/
 	Char		curgr;		/* Current GR setting.		*/
 	Char		curss;		/* Current single shift.	*/
@@ -2521,7 +2538,7 @@ typedef struct {
 	Char		vt52_save_curgl;
 	Char		vt52_save_curgr;
 	Char		vt52_save_curss;
-	int		vt52_save_gsets[4];
+	DECNRCM_codes	vt52_save_gsets[NUM_GSETS];
 #endif
 	/* Testing */
 #if OPT_XMC_GLITCH
@@ -2564,11 +2581,17 @@ typedef struct {
 	Boolean		keepClipboard;	/* retain data sent to clipboard */
 	Boolean		keepSelection;	/* do not lose selection on output */
 	Boolean		replyToEmacs;	/* Send emacs escape code when done selecting or extending? */
+
 	Char		*selection_data; /* the current selection */
 	int		selection_size; /* size of allocated buffer */
 	unsigned long	selection_length; /* number of significant bytes */
+
 	Char		*clipboard_data; /* the current clipboard */
 	unsigned long	clipboard_size; /*  size of allocated buffer */
+
+	Atom		owned_atom;	/* last XtOwnSelection atom */
+	Time		owned_time;	/* timestamp for last XtOwnSelection */
+
 	EventMode	eventMode;
 	Time		selection_time;	/* latest event timestamp */
 	Time		lastButtonUpTime;
@@ -3382,6 +3405,10 @@ typedef struct Tek_Link
 
 #ifndef TRACE_CHILD
 #define TRACE_CHILD /*nothing*/
+#endif
+
+#ifndef TRACE_EVENT
+#define TRACE_EVENT(t,e,s,n) /*nothing*/
 #endif
 
 #ifndef TRACE_FOCUS

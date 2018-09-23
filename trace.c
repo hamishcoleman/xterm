@@ -1,4 +1,4 @@
-/* $XTermId: trace.c,v 1.175 2018/04/26 08:51:58 tom Exp $ */
+/* $XTermId: trace.c,v 1.186 2018/09/18 01:09:22 tom Exp $ */
 
 /*
  * Copyright 1997-2017,2018 by Thomas E. Dickey
@@ -35,6 +35,7 @@
  */
 
 #include <xterm.h>		/* for definition of GCC_UNUSED */
+#include <xstrings.h>
 #include <version.h>
 
 #if OPT_TRACE
@@ -245,9 +246,9 @@ visibleDblChrset(unsigned chrset)
 #endif
 
 const char *
-visibleScsCode(int chrset)
+visibleScsCode(DECNRCM_codes chrset)
 {
-#define MAP(to,from) case from: result = to; break
+#define MAP(to,from) case from: result = to ":" #from; break
     const char *result = "<ERR>";
     switch ((DECNRCM_codes) chrset) {
 	MAP("B", nrc_ASCII);
@@ -268,14 +269,15 @@ visibleScsCode(int chrset)
 	MAP("Q", nrc_French_Canadian);
 	MAP("9", nrc_French_Canadian2);
 	MAP("K", nrc_German);
-	MAP("\"?", nrc_Greek);
-	MAP("F", nrc_Greek_Supp);
-	MAP("\"4", nrc_Hebrew);
-	MAP("%=", nrc_Hebrew2);
-	MAP("H", nrc_Hebrew_Supp);
+	MAP("\"?", nrc_DEC_Greek_Supp);
+	MAP("\">", nrc_Greek);
+	MAP("F", nrc_ISO_Greek_Supp);
+	MAP("\"4", nrc_DEC_Hebrew_Supp);
+	MAP("%=", nrc_Hebrew);
+	MAP("H", nrc_ISO_Hebrew_Supp);
 	MAP("Y", nrc_Italian);
-	MAP("M", nrc_Latin_5_Supp);
-	MAP("L", nrc_Latin_Cyrillic);
+	MAP("M", nrc_ISO_Latin_5_Supp);
+	MAP("L", nrc_ISO_Latin_Cyrillic);
 	MAP("`", nrc_Norwegian_Danish);
 	MAP("E", nrc_Norwegian_Danish2);
 	MAP("6", nrc_Norwegian_Danish3);
@@ -286,8 +288,8 @@ visibleScsCode(int chrset)
 	MAP("7", nrc_Swedish);
 	MAP("H", nrc_Swedish2);
 	MAP("=", nrc_Swiss);
-	MAP("%0", nrc_Turkish);
-	MAP("%2", nrc_Turkish2);
+	MAP("%2", nrc_Turkish);
+	MAP("%0", nrc_DEC_Turkish_Supp);
 	MAP("<UNK>", nrc_Unknown);
     }
 #undef MAP
@@ -596,7 +598,11 @@ TraceAtomName(Display *dpy, Atom atom)
 {
     static char *result;
     free(result);
-    result = XGetAtomName(dpy, atom);
+    if (atom != 0) {
+	result = XGetAtomName(dpy, atom);
+    } else {
+	result = x_strdup("NONE");
+    }
     return result;
 }
 
@@ -675,6 +681,99 @@ TraceScreen(XtermWidget xw, int whichBuf)
     } else {
 	TRACE(("TraceScreen %d is nil\n", whichBuf));
     }
+}
+
+static char *
+formatEventMask(char *target, int source, Boolean buttons)
+{
+#define DATA(name) { name ## Mask, #name }
+    static struct {
+	int mask;
+	const char *name;
+    } table[] = {
+	DATA(Shift),
+	    DATA(Lock),
+	    DATA(Control),
+	    DATA(Mod1),
+	    DATA(Mod2),
+	    DATA(Mod3),
+	    DATA(Mod4),
+	    DATA(Mod5),
+	    DATA(Button1),
+	    DATA(Button2),
+	    DATA(Button3),
+	    DATA(Button4),
+	    DATA(Button5),
+    };
+#undef DATA
+    Cardinal n;
+    char marker = L_CURL;
+    char *base = target;
+
+    for (n = 0; n < XtNumber(table); ++n) {
+	if (!buttons && (table[n].mask >= Button1Mask))
+	    continue;
+	if ((table[n].mask & source)) {
+	    UIntClr(source, table[n].mask);
+	    sprintf(target, "%c%s", marker, table[n].name);
+	    target += strlen(target);
+	    marker = '|';
+	}
+    }
+
+    if (source != 0) {
+	sprintf(target, "%c?%#x", marker, source);
+	target += strlen(target);
+	marker = '|';
+    }
+
+    if (marker == L_CURL)
+	*target++ = L_CURL;
+    *target++ = R_CURL;
+
+    *target = '\0';
+    return base;
+}
+
+void
+TraceEvent(const char *tag, XEvent *ev, String *params, Cardinal *num_params)
+{
+    char mask_buffer[160];
+
+    TRACE(("Event #%lu %s: %s",
+	   ev->xany.serial,
+	   tag,
+	   visibleEventType(ev->type)));
+
+    switch (ev->type) {
+    case KeyPress:
+	/* FALLTHRU */
+    case KeyRelease:
+	TRACE((" keycode 0x%04X %s",
+	       ev->xkey.keycode,
+	       formatEventMask(mask_buffer, ev->xkey.state, False)));
+	break;
+    case ButtonPress:
+	/* FALLTHRU */
+    case ButtonRelease:
+	TRACE((" button %u %s",
+	       ev->xbutton.button,
+	       formatEventMask(mask_buffer, ev->xbutton.state, True)));
+	break;
+    case MotionNotify:
+	TRACE((" (%d,%d)",
+	       ev->xmotion.y_root,
+	       ev->xmotion.x_root));
+	break;
+    case EnterNotify:
+    case LeaveNotify:
+    case FocusIn:
+    case FocusOut:
+    default:
+	TRACE((" FIXME"));
+	break;
+    }
+    TRACE(("\n"));
 }
 
 void

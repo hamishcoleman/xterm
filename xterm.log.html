@@ -30,7 +30,7 @@
  * sale, use or other dealings in this Software without prior written        *
  * authorization.                                                            *
  *****************************************************************************
-  $XTermId: xterm.log.html,v 1.1895 2018/08/15 01:40:15 tom Exp $
+  $XTermId: xterm.log.html,v 1.1932 2018/09/21 23:59:48 tom Exp $
   -->
 <!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01//EN">
 
@@ -72,6 +72,10 @@
   CHANGELOG</a>).</p>
 
   <ul>
+    <li><a href="#xterm_337">Patch #337 - 2018/09/21</a></li>
+
+    <li><a href="#xterm_336">Patch #336 - 2018/09/19</a></li>
+
     <li><a href="#xterm_335">Patch #335 - 2018/08/14</a></li>
 
     <li><a href="#xterm_334">Patch #334 - 2018/08/12</a></li>
@@ -953,6 +957,129 @@
     <li><a href="#xterm_02">Patch #2 - 1996/1/7</a></li>
 
     <li><a href="#xterm_01">Patch #1 - 1996/1/6</a></li>
+  </ul>
+
+  <h1><a name="xterm_337" id="xterm_337">Patch #337 -
+  2018/09/21</a></h1>
+
+  <ul>
+    <li>regenerated configure script (report by Sven Joachim).</li>
+
+    <li>revise/improve fix for scrolling in margins
+    (report/analysis by Martin Hostettler):</li>
+
+    <li>amend change to default-translations "select" subset to
+    ensure that specific key-press actions are listed before
+    generic key-press actions (reports by H Merijn Brand, Sven
+    Joachim).</li>
+  </ul>
+
+  <h1><a name="xterm_336" id="xterm_336">Patch #336 -
+  2018/09/19</a></h1>
+
+  <ul>
+    <li>ensure that only one of PRIMARY and CLIPBOARD is owned by
+    xterm at a given time (Debian #901249).</li>
+
+    <li>documentation fixes (report by Lars Krueger):
+
+      <ul>
+        <li>document <code>SL</code> and <code>SR</code>.</li>
+
+        <li>document <code>DECRPTUI</code>, change number of digits
+        to match VT420.</li>
+      </ul>
+    </li>
+
+    <li>revise <code>omitTranslation</code> resource, e.g.,
+    splitting &ldquo;default&rdquo; into several more useful
+    categories.</li>
+
+    <li>modify mask-logic to permit <em>control-</em> and
+    <em>meta-</em> modifiers to be used in mouse protocol.</li>
+
+    <li>several fixes for parsing/state (report/testcases by Martin
+    Hostettler):
+
+      <ul>
+        <li>remove an old/unimplemented entry for xterm-title from
+        state table.</li>
+
+        <li>save/restore wrap-flag when scrolling, to fix an
+        inconsistency between jump-scrolling and
+        normal-scrolling.</li>
+
+        <li>improve a special case of wrapping where the cursor
+        starts beyond the right-margin, and wraps at the terminal's
+        last-column before the settable-margins can take
+        effect.</li>
+
+        <li>if origin mode is set, adjust a restored cursor column
+        relative to the left margin.</li>
+
+        <li>when scrolling a line within left/right margins,
+        correct order of the fixups needed when a double-width
+        character crosses the margin boundary.</li>
+      </ul>
+    </li>
+
+    <li>review/fix a few cases where the parsing state was not
+    reset after completing a control sequence (prompted by report
+    by Martin Hostettler).</li>
+
+    <li>disallow <code>XTCHECKSUM</code> if the corresponding
+    window-ops "SetChecksum" is unset.</li>
+
+    <li>add <code>print-vt-chars.pl</code> script to illustrate the
+    NRCS and codepages supported by xterm.</li>
+
+    <li>add <code>other-sgr.sh</code> script to demonstrate the
+    non-VT100 video attributes implemented in <a href=
+    "#xterm_305">patch #305</a>, and added a summary of their
+    introduction in ECMA-48 to the control sequences document.</li>
+
+    <li>add <code>tabs</code> and <code>-tabs</code> keywords to
+    <code>ttyModes</code> resource to simplify workaround for
+    terminal drivers which are not aware of UTF-8 (FreeBSD
+    #229682).</li>
+
+    <li>add VT5xx NRCS 7-bit Turkish and DEC Turkish.</li>
+
+    <li>add VT5xx NRCS 7-bit Hebrew and DEC Hebrew.</li>
+
+    <li>add VT5xx NRCS 7-bit Greek and DEC Greek.</li>
+
+    <li>correct a few post-VT220 codepages to make them display
+    without setting the NRCS state.</li>
+
+    <li>extend <code>vt100Graphics</code> resource to include other
+    character-sets such as the VT500 codepages in UTF-8 mode.</li>
+
+    <li>add some VT5xx codepages to help with the discussion of
+    96-character sets: <em>ISO Greek Supplemental</em>, <em>ISO
+    Hebrew Supplemental</em>, <em>ISO Latin&ndash;5
+    Supplemental</em>, and <em>ISO Latin&ndash;Cyrillic</em>.</li>
+
+    <li>improve description of the VT300-controls for designating
+    character sets, and fix a typo which indicated that some were
+    used for 94-character sets (prompted by discussion with Lars
+    Krueger).</li>
+
+    <li>add private control <code>XTCHECKSUM</code> for modifying
+    <code>checksumExtension</code>.</li>
+
+    <li>factor out xterm's <code>DECRQCRA</code> checksum
+    extensions as a resource setting
+    <code>checksumExtension</code>.</li>
+
+    <li>revise calculation of checksum for <code>DECRQCRA</code> to
+    match DEC's terminals (using screenshots of vttest provided by
+    Markus Schmidt).</li>
+
+    <li>restore a fix for memory-checksum setup of
+    <code>DECCKSR</code> from <a href="xterm_315">patch #315</a>
+    incorrectly reverted in <a href="xterm_334">patch #334</a> as
+    part of fix for <code>DECRQCRA</code>.</li>
   </ul>
 
   <h1><a name="xterm_335" id="xterm_335">Patch #335 -

@@ -1,5 +1,5 @@
 '\" t
-.\" $XTermId: xterm.man,v 1.750 2018/08/13 23:35:34 tom Exp $
+.\" $XTermId: xterm.man,v 1.762 2018/09/16 17:12:04 tom Exp $
 .\"
 .\" Copyright 1996-2017,2018 by Thomas E. Dickey
 .\"
@@ -1769,13 +1769,48 @@ Selectively omit one or more parts of \fI\*n\fP's default translations
 at startup.
 The resource value is a comma-separated list of keywords,
 which may be abbreviated:
-\*(``fullscreen\*('',
-\*(``scroll-lock\*('',
-\*(``shift-fonts\*('' or
-\*(``wheel-mouse\*(''.
-\fI\*N\fP also recognizes \*(``default\*('',
-but omitting that will make the program unusable
-unless you provide a similar definition in your resource settings.
+.RS
+.TP
+default
+ignore (mouse) button-down events which were not handled by other translations
+.TP
+fullscreen
+assigns a key-binding to the \fBfullscreen()\fP action.
+.TP
+keypress
+assigns keypresses by default to the
+\fBinsert-seven-bit()\fP and
+\fBinsert-eight-bit()\fP actions.
+.TP
+paging
+assigns key bindings to the
+\fBscroll-back()\fP and
+\fBscroll-forw()\fP actions.
+.TP
+popup-menu
+assigns mouse-buttons with the \fIcontrol\fP modifier to the popup-menus.
+.TP
+reset
+assigns mouse-button 2
+with the \fImeta\fP modifier to the \fBclear-saved-lines\fP action.
+.TP
+scroll-lock
+assigns a key-binding to the \fBscroll-lock()\fP action.
+.TP
+select
+assigns mouse- and keypress-combinations
+to actions which manipulate the selection.
+.TP
+shift-fonts
+assigns key-bindings to
+\fBlarger-vt-font()\fP and
+\fBsmaller-vt-font()\fP actions.
+.TP
+wheel-mouse
+assigns buttons 4 and 5 with different modifiers to the
+\fBscroll-back()\fP and
+\fBscroll-forw()\fP actions.
+.RE
 .TP 8
 .B ptyHandshake\fP (class\fB PtyHandshake\fP)
 If \*(``true\*('', \fI\*n\fP will perform handshaking during initialization
@@ -1930,28 +1965,54 @@ The default is
 \*(``true\*(''.
 .TP 8
 .B "ttyModes\fP (class\fB TtyModes\fP)"
-Specifies a string containing terminal setting keywords and the characters
-to which they may be bound.
+Specifies a string containing terminal setting keywords.
+Except where noted, they may be bound to \fIcharacters\fP.
+Other keywords set \fImodes\fP.
+Not all keywords are supported on a given system.
 Allowable keywords include:
-brk,
-dsusp,
-eof,
-eol,
-eol2,
-erase,
-erase2,
-flush,
-intr,
-kill,
-lnext,
-quit,
-rprnt,
-start,
-status,
-stop,
-susp,
-swtch and
-weras.
+.TS
+l l l
+_ _ _
+l l l.
+\fBKeyword\fR	\fBPOSIX?\fR	\fBNotes\fR
+brk	no	T{
+\fICHAR\fP may send an \*(``interrupt\*('' signal,
+as well as ending the input-line.
+T}
+dsusp	no	T{
+\fICHAR\fP will send a terminal \*(``stop\*('' signal after input is flushed.
+T}
+eof	yes	T{
+\fICHAR\fP will terminate input (i.e., an end of file).
+T}
+eol	yes	\fICHAR\fP will end the line.
+eol2	no	alternate \fICHAR\fP for ending the line.
+erase	yes	\fICHAR\fP will erase the last character typed.
+erase2	no	T{
+alternate \fICHAR\fP for erasing the last input-character.
+T}
+flush	no	T{
+\fICHAR\fP will cause output to be discarded until another \fBflush\fP character is typed.
+T}
+intr	yes	\fICHAR\fP will send an \*(``interrupt\*('' signal.
+kill	yes	\fICHAR\fP will erase the current line.
+lnext	no	\fICHAR\fP will enter the next character quoted.
+quit	yes	\fPCHAR\fP will send a \*(``quit\*('' signal.
+rprnt	no	\fICHAR\fP will redraw the current line.
+start	yes	T{
+\fICHAR\fP will \fIrestart\fP the output after stopping it.
+T}
+status	no	T{
+\fICHAR\fP will cause a system-generated status line to be printed.
+T}
+stop	yes	\fICHAR\fP will stop the output.
+susp	yes	\fICHAR\fP will send a terminal \*(``stop\*('' signal
+swtch	no	\fICHAR\fP will switch to a different shell layer.
+tabs	yes	\fIMode\fP disables tab-expansion.
+-tabs	yes	\fIMode\fP enables tab-expansion.
+weras	no	\fICHAR\fP will erase the last word typed.
+.TE
+.IP
 Control characters may be specified as ^char (e.g., ^c or ^u)
 and \fB^?\fP may be used to indicate delete (127).
 Use \fB^\-\fP to denote \fIundef\fP.
@@ -1959,10 +2020,12 @@ Use \fB\\034\fP to represent \fB^\\\fP, since a literal backslash in
 an X resource escapes the next character.
 .IP
 This is very useful for overriding
-the default terminal settings without having to do an \fIstty\fP every time
+the default terminal settings without having to run \fIstty\fP every time
 an \fI\*n\fP is started.
 Note, however, that the \fIstty\fP program on a given host may use different
 keywords; \fI\*n\fR's table is built in.
+The \fIPOSIX\fP column in the table indicates which keywords
+are supported by a standard \fIstty\fP program.
 .IP
 If the \fBttyModes\fP resource specifies a value for \fBerase\fP,
 that overrides the \fBptyInitialErase\fP resource setting,
@@ -2506,6 +2569,36 @@ Specifies comma-separated lists of character class bindings of the form
 These are used in determining which
 sets of characters should be treated the same when doing cut and paste.
 See the \fBCHARACTER CLASSES\fP section.
+.TP 8
+.B "checksumExtension\fP (class\fB ChecksumExtension\fP)"
+DEC VT420 and up support a control sequence \fBDECRQCRA\fP which reports
+the checksum of the characters in a rectangle.
+\fI\*N\fP supports this, with extensions that can be configured with
+bits of the \fBchecksumExtension\fP:
+.RS
+.TP 5
+0
+do not negate the result.
+.TP 5
+1
+do not report the VT100 video attributes.
+.TP 5
+2
+do not omit checksum for blanks.
+.TP 5
+3
+omit checksum for cells not explicitly initialized.
+.TP 5
+4
+do not mask cell value to 8 bits or ignore combining characters.
+.TP 5
+5
+do not mask cell value to 7 bits.
+.RE
+.IP
+With the default value (0),
+\fI\*n\fP matches the behavior of DEC's terminals.
+To use all extensions, set all bits, \*(``-1\*('' for example.
 .TP 8
 .B "cjkWidth\fP (class\fB CjkWidth\fP)"
 Specifies whether \fI\*n\fP should follow
@@ -3066,6 +3159,9 @@ Refresh the \*n window.
 .TP 5
 RestoreWin (1)
 De-iconify window.
+.TP 5
+SetChecksum
+Modify algorithm for reporting checksum of characters in a rectangular region.
 .TP 5
 SetSelection
 Set selection data.
@@ -4127,7 +4223,7 @@ see which iconified windows have sounded a bell.
 .B "precompose\fP (class\fB Precompose\fP)"
 Tells \fI\*n\fP whether to precompose UTF-8 data into Normalization Form C,
 which combines commonly-used accents onto base characters.
-If it does not do this, accents are left as separatate characters.
+If it does not do this, accents are left as separate characters.
 The default is \*(``true\*(''.
 .TP 8
 .B "preeditType\fP (class\fB PreeditType\fP)"

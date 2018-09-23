@@ -21,7 +21,7 @@
                              Thomas Dickey
                       XFree86 Project (1996-2006)
                     invisible-island.net (2006-2018)
-               updated for XTerm Patch #334 (2018/08/10)
+               updated for XTerm Patch #336 (2018/09/16)
 
 
 
@@ -159,6 +159,15 @@ These control characters are used in the vtXXX emulation.
 
 VT100 Mode
 
+In this document, "VT100" refers not only to VT100/VT102, but also to
+the succession of upward-compatible terminals produced by DEC (Digital
+Equipment Corporation) from the mid-1970s for about twenty years.  For
+brevity, the document refers to the related models:
+  "VT200" as VT220/VT240,
+  "VT300" as VT320/VT340,
+  "VT400" as VT420, and
+  "VT500" as VT510/VT520/VT525.
+
 Most of these control sequences are standard VT102 control sequences,
 but there is support for later DEC VT terminals (i.e., VT220, VT320,
 VT420, VT510), as well as ECMA-48 and aixterm color controls.  The only
@@ -193,11 +202,13 @@ FF        Form Feed or New Page (NP).  (FF  is Ctrl-L).  FF  is treated
 
 LF        Line Feed or New Line (NL).  (LF  is Ctrl-J).
 
-SI        Shift In (Ctrl-O) -> Switch to Standard Character Set.  This
-          invokes the G0 character set (the default).
+SI        Switch to Standard Character Set (Ctrl-O is Shift In or LS0).
+          This invokes the G0 character set (the default) as GL.
+          VT200 and up implement LS0.
 
-SO        Shift Out (Ctrl-N) -> Switch to Alternate Character Set.  This
-          invokes the G1 character set.
+SO        Switch to Alternate Character Set (Ctrl-N is Shift Out or
+          LS1).  This invokes the G1 character set as GL.
+          VT200 and up implement LS1.
 
 SP        Space.
 
@@ -237,49 +248,79 @@ ESC % G   Select UTF-8 character set, ISO 2022.
 
 ESC ( C   Designate G0 Character Set, VT100, ISO 2022.
           Final character C for designating 94-character sets.  In this
-          list, 0 , A  and B  apply to VT100 and up, the remainder to
-          VT220 and up.  The VT220 character sets, together with the
-          Portuguese character set are activated by the National
-          Replacement Character controls.  The A  is a special case,
-          since it is also activated by the VT300-control for British
-          Latin-1 separately from the National Replacement Character
-          controls.
-            C = 0  -> DEC Special Character and Line Drawing Set.
-            C = <  -> DEC Supplementary (VT200).
-            C = % 5  -> DEC Supplementary Graphics (VT300).
-            C = >  -> DEC Technical (VT300).
-            C = A  -> United Kingdom (UK).
-            C = B  -> United States (USASCII).
-            C = 4  -> Dutch.
-            C = C  or 5  -> Finnish.
-            C = R  or f  -> French.
-            C = Q  or 9  -> French Canadian (VT200, VT300).
-            C = K  -> German.
-            C = Y  -> Italian.
-            C = ` , E  or 6  -> Norwegian/Danish.
-            C = % 6  -> Portuguese (VT300).
-            C = Z  -> Spanish.
-            C = H  or 7  -> Swedish.
-            C = =  -> Swiss.
+          list,
+          o   0 , A  and B  were introduced in the VT100,
+          o   most were introduced in the VT200 series,
+          o   a few were introduced in the VT300 series, and
+          o   a few more were introduced in the VT500 series.
+          The VT220 character sets, together with a few others (such as
+          Portuguese) are activated by the National Replacement Charac-
+          ter Set (NRCS) controls.  The term "replacement" says that the
+          character set is formed by replacing some of the characters in
+          a set (termed the Multinational Character Set) with more use-
+          ful ones for a given language.  The ASCII and DEC Supplemental
+          character sets make up the two halves of the Multinational
+          Character set, initially mapped to GL and GR.
+          The valid final characters C for this control are:
+            C = A  -> United Kingdom (UK), VT100.
+            C = B  -> United States (USASCII), VT100.
+            C = 4  -> Dutch, VT200.
+            C = C  or 5  -> Finnish, VT200.
+            C = R  or f  -> French, VT200.
+            C = Q  or 9  -> French Canadian, VT200.
+            C = K  -> German, VT200.
+            C = " >  -> Greek, VT500.
+            C = % =  -> Hebrew, VT500.
+            C = Y  -> Italian, VT200.
+            C = ` , E  or 6  -> Norwegian/Danish, VT200.
+            C = % 6  -> Portuguese, VT300.
+            C = Z  -> Spanish, VT200.
+            C = H  or 7  -> Swedish, VT200.
+            C = =  -> Swiss, VT200.
+            C = % 2  -> Turkish, VT500.
+          The final character A  is a special case, since the same final
+          character is used by the VT300-control for the 96-character
+          British Latin-1.
+          There are a few other 94-character sets not documented as
+          NRCS:
+            C = 0  -> DEC Special Character and Line Drawing Set, VT100.
+            C = <  -> DEC Supplemental, VT200.
+            C = >  -> DEC Technical, VT300.
+            C = % 5  -> DEC Supplemental Graphics, VT300.
+            C = " ?  -> DEC Greek, VT500.
+            C = " 4  -> DEC Hebrew, VT500.
+            C = % 0  -> DEC Turkish, VT500.
+          The VT520 reference manual lists a few more, but no documenta-
+          tion has been found for the mappings:
+            C = & 4  -> DEC Cyrillic, VT500.
+            C = & 5  -> DEC Russian, VT500.
+            C = % 3  -> SCS NRCS, VT500.
 
-ESC ) C   Designate G1 Character Set (ISO 2022, VT100).
+ESC ) C   Designate G1 Character Set, ISO 2022, VT100.
           The same character sets apply as for ESC ( C.
 
-ESC * C   Designate G2 Character Set (ISO 2022, VT220).
+ESC * C   Designate G2 Character Set, ISO 2022, VT220.
           The same character sets apply as for ESC ( C.
 
-ESC + C   Designate G3 Character Set (ISO 2022, VT220).
+ESC + C   Designate G3 Character Set, ISO 2022, VT220.
           The same character sets apply as for ESC ( C.
 
-ESC - C   Designate G1 Character Set (VT300).
-          The same character sets apply as for ESC ( C.
+ESC - C   Designate G1 Character Set, VT300.
+          These controls apply only to 96-character sets.  Unlike the
+          94-character sets, these can have different values than ASCII
+          space and DEL for the mapping of 0x20 and 0x7f.  The valid
+          final characters C for this control are:
+            C = A  -> ISO Latin-1 Supplemental (VT300).
+            C = F  -> ISO Greek Supplemental (VT500).
+            C = H  -> ISO Hebrew Supplemental (VT500).
+            C = L  -> ISO Latin-Cyrillic (VT500).
+            C = M  -> ISO Latin-5 Supplemental (VT500).
 
-ESC . C   Designate G2 Character Set (VT300).
-          The same character sets apply as for ESC ( C.
+ESC . C   Designate G2 Character Set, VT300.
+          The same character sets apply as for ESC - C.
 
-ESC / C   Designate G3 Character Set (VT300).
-          These work for 96-character sets only.
-            C = A  -> ISO Latin-1 Supplemental.
+ESC / C   Designate G3 Character Set, VT300.
+          The same character sets apply as for ESC - C.
 
 ESC 6     Back Index (DECBI), VT420 and up.
 
@@ -303,9 +344,9 @@ ESC l     Memory Lock (per HP terminals).  Locks memory above the cur-
 
 ESC m     Memory Unlock (per HP terminals).
 
-ESC n     Invoke the G2 Character Set as GL (LS2).
+ESC n     Invoke the G2 Character Set as GL (LS2) as GL.
 
-ESC o     Invoke the G3 Character Set as GL (LS3).
+ESC o     Invoke the G3 Character Set as GL (LS3) as GL.
 
 ESC |     Invoke the G3 Character Set as GR (LS3R).
 
@@ -394,7 +435,13 @@ Functions using CSI , ordered by the final character(s)
 
 CSI Ps @  Insert Ps (Blank) Character(s) (default = 1) (ICH).
 
+CSI Ps SP @
+          Shift left Ps columns(s) (default = 1) (SL), ECMA-48.
+
 CSI Ps A  Cursor Up Ps Times (default = 1) (CUU).
+
+CSI Ps SP A
+          Shift right Ps columns(s) (default = 1) (SR), ECMA-48.
 
 CSI Ps B  Cursor Down Ps Times (default = 1) (CUD).
 
@@ -551,6 +598,12 @@ CSI Ps c  Send Device Attributes (Primary DA).
             Ps = 2 1  -> Horizontal scrolling.
             Ps = 2 2  -> ANSI color, e.g., VT525.
             Ps = 2 9  -> ANSI text locator (i.e., DEC Locator mode).
+
+CSI = Ps c
+          Send Device Attributes (Tertiary DA).
+            Ps = 0  -> report Terminal Unit ID (default), VT400.  XTerm
+          uses zeros for the site code and serial number in its DECRPTUI
+          response.
 
 CSI > Ps c
           Send Device Attributes (Secondary DA).
@@ -817,23 +870,24 @@ CSI ? Pm l
             Ps = 2 0 0 4  -> Reset bracketed paste mode, xterm.
 
 CSI Pm m  Character Attributes (SGR).
-            Ps = 0  -> Normal (default).
-            Ps = 1  -> Bold.
-            Ps = 2  -> Faint, decreased intensity (ECMA-48).
-            Ps = 3  -> Italicized (ECMA-48).
-            Ps = 4  -> Underlined.
-            Ps = 5  -> Blink (appears as Bold in X11R6 xterm).
-            Ps = 7  -> Inverse.
-            Ps = 8  -> Invisible, i.e., hidden (VT300).
-            Ps = 9  -> Crossed-out characters (ECMA-48).
-            Ps = 2 1  -> Doubly-underlined (ECMA-48).
-            Ps = 2 2  -> Normal (neither bold nor faint).
-            Ps = 2 3  -> Not italicized (ECMA-48).
-            Ps = 2 4  -> Not underlined.
-            Ps = 2 5  -> Steady (not blinking).
-            Ps = 2 7  -> Positive (not inverse).
-            Ps = 2 8  -> Visible, i.e., not hidden (VT300).
-            Ps = 2 9  -> Not crossed-out (ECMA-48).
+            Ps = 0  -> Normal (default), VT100.
+            Ps = 1  -> Bold, VT100.
+            Ps = 2  -> Faint, decreased intensity, ECMA-48 2nd.
+            Ps = 3  -> Italicized, ECMA-48 2nd.
+            Ps = 4  -> Underlined, VT100.
+            Ps = 5  -> Blink, VT100.
+          This appears as Bold in X11R6 xterm.
+            Ps = 7  -> Inverse, VT100.
+            Ps = 8  -> Invisible, i.e., hidden, ECMA-48 2nd, VT300.
+            Ps = 9  -> Crossed-out characters, ECMA-48 3rd.
+            Ps = 2 1  -> Doubly-underlined, ECMA-48 3rd.
+            Ps = 2 2  -> Normal (neither bold nor faint), ECMA-48 3rd.
+            Ps = 2 3  -> Not italicized, ECMA-48 3rd.
+            Ps = 2 4  -> Not underlined, ECMA-48 3rd.
+            Ps = 2 5  -> Steady (not blinking), ECMA-48 3rd.
+            Ps = 2 7  -> Positive (not inverse), ECMA-48 3rd.
+            Ps = 2 8  -> Visible, i.e., not hidden, ECMA-48 3rd, VT300.
+            Ps = 2 9  -> Not crossed-out, ECMA-48 3rd.
             Ps = 3 0  -> Set foreground color to Black.
             Ps = 3 1  -> Set foreground color to Red.
             Ps = 3 2  -> Set foreground color to Green.
@@ -842,7 +896,7 @@ CSI Pm m  Character Attributes (SGR).
             Ps = 3 5  -> Set foreground color to Magenta.
             Ps = 3 6  -> Set foreground color to Cyan.
             Ps = 3 7  -> Set foreground color to White.
-            Ps = 3 9  -> Set foreground color to default (original).
+            Ps = 3 9  -> Set foreground color to default, ECMA-48 3rd.
             Ps = 4 0  -> Set background color to Black.
             Ps = 4 1  -> Set background color to Red.
             Ps = 4 2  -> Set background color to Green.
@@ -851,7 +905,31 @@ CSI Pm m  Character Attributes (SGR).
             Ps = 4 5  -> Set background color to Magenta.
             Ps = 4 6  -> Set background color to Cyan.
             Ps = 4 7  -> Set background color to White.
-            Ps = 4 9  -> Set background color to default (original).
+            Ps = 4 9  -> Set background color to default, ECMA-48 3rd.
+
+          Some of the above note the edition of ECMA-48 which first
+          describes a feature.  In its successive editions from 1979 to
+          1991 (2nd 1979, 3rd 1984, 4th 1986, and 5th 1991), ECMA-48
+          listed codes through 6 5 (skipping several toward the end of
+          the range).  Most of the ECMA-48 codes not implemented in
+          xterm were never implemented in a hardware terminal.  Several
+          (such as 3 9  and 4 9 ) are either noted in ECMA-48 as imple-
+          mentation defined, or described in vague terms.
+
+          The successive editions of ECMA-48 give little attention to
+          changes from one edition to the next, except to comment on
+          features which have become obsolete.  ECMA-48 1st (1976) is
+          unavailable; there is no reliable source of information which
+          states whether "ANSI" color was defined in that edition, or
+          later (1979).  The VT100 (1978) implemented the most commonly
+          used non-color video attributes which are given in the 2nd
+          edition.
+
+          While 8-color support is described in ECMA-48 2nd edition, the
+          VT500 series (introduced in 1993) were the first DEC terminals
+          implementing "ANSI" color.  The DEC terminal's use of color is
+          known to differ from xterm; useful documentation on this
+          series became available too late to influence xterm.
 
           If 16-color support is compiled, the following aixterm con-
           trols apply.  Assume that xterm's resources are set so that
@@ -880,7 +958,7 @@ CSI Pm m  Character Attributes (SGR).
             Ps = 1 0 0  -> Set foreground and background color to
           default.
 
-          Xterm maintains a color palette whose entries are identified
+          XTerm maintains a color palette whose entries are identified
           by an index beginning with zero.  If 88- or 256-color support
           is compiled, the following apply:
           o   All parameters are decimal integers.
@@ -890,7 +968,8 @@ CSI Pm m  Character Attributes (SGR).
               in this control to be replaced by colons (but after the
               first colon, colons must be used).
 
-          These ISO-8613-6 controls are supported:
+          These ISO-8613-6 controls (marked in ECMA-48 5th edition as
+          "reserved for future standardization") are supported by xterm:
             Pm = 3 8 ; 2 ; Pi ; Pr ; Pg ; Pb -> Set foreground color to
           the closest match in xterm's palette for the given RGB
           Pr/Pg/Pb.  The color space identifier Pi is ignored.
@@ -1262,6 +1341,17 @@ CSI Pc ; Pt ; Pl ; Pb ; Pr $ x
             Pc is the character to use.
             Pt ; Pl ; Pb ; Pr denotes the rectangle.
 
+CSI Ps # y
+          Select checksum extension (XTCHECKSUM), xterm.  The bits of Ps
+          modify the calculation of the checksum returned by DECRQCRA:
+            0  -> do not negate the result.
+            1  -> do not report the VT100 video attributes.
+            2  -> do not omit checksum for blanks.
+            3  -> omit checksum for cells not explicitly initialized.
+            4  -> do not mask cell value to 8 bits or ignore combining
+          characters.
+            5  -> do not mask cell value to 7 bits.
+
 CSI Pi ; Pg ; Pt ; Pl ; Pb ; Pr * y
           Request Checksum of Rectangular Area (DECRQCRA), VT420 and up.
           Response is
@@ -1316,6 +1406,7 @@ CSI Ps ; Ps # {
             Ps = 1 0  -> Foreground color.
             Ps = 1 1  -> Background color.
             Ps = 2 1  -> Doubly-underlined.
+
           If no parameters are given, all of the video attributes are
           saved.  The stack is limited to 10 levels.
 
@@ -1910,12 +2001,12 @@ xterm-hp terminfo entry for details.
 
 The Alternate Screen Buffer
 
-Xterm maintains two screen buffers.  The Normal Screen Buffer allows you
+XTerm maintains two screen buffers.  The Normal Screen Buffer allows you
 to scroll back to view saved lines of output up to the maximum set by
 the saveLines resource.  The Alternate Screen Buffer is exactly as large
 as the display, contains no additional saved lines.  When the Alternate
 Screen Buffer is active, you cannot scroll back to view saved lines.
-Xterm provides control sequences and menu entries for switching between
+XTerm provides control sequences and menu entries for switching between
 the two.
 
 Most full-screen applications use terminfo or termcap to obtain strings
@@ -2152,7 +2243,7 @@ when the terminal gains focus, and CSI O  when it loses focus.
 Extended coordinates
 
 The original X10 mouse protocol limits the Cx and Cy ordinates to 223
-(=255 - 32).  Xterm supports more than one scheme for extending this
+(=255 - 32).  XTerm supports more than one scheme for extending this
 range, by changing the protocol encoding:
 
 UTF-8 (1005)
@@ -2508,6 +2599,10 @@ o   VT520/VT525 Video Terminal
     Programmer Information.
     Digital Equipment Corporation (EK-VT520-RM A01, July 1994).
 
+o   Digital ANSI-Compliant Printing Protocol
+    Level 2 Programming Reference Manual
+    Digital Equipment Corporation (EK-PPLV2-PM. B01, August 1994).
+
 o   4014 and 4014-1 Computer Display Terminal
     User's Manual.
     Tektronix, Inc.  (070-1647-00, November 1979).
@@ -2538,7 +2633,7 @@ tors.  Documentation for these and other terminal emulators which have
 influenced xterm are generally available only in less-accessible and
 less-detailed manual pages.
 
-o   Xterm supports control sequences for manipulating its window which
+o   XTerm supports control sequences for manipulating its window which
     were implemented by Sun's shelltool program.  This was part of Sun-
     View (SunOS 3.0, 1986).  The change-notes for xterm's resize program
     in X10.4 (1986) mention its use of these "Sun tty emulation escape

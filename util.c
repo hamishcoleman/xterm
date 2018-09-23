@@ -1,4 +1,4 @@
-/* $XTermId: util.c,v 1.762 2018/08/08 01:37:44 tom Exp $ */
+/* $XTermId: util.c,v 1.768 2018/09/21 20:48:20 tom Exp $ */
 
 /*
  * Copyright 1999-2017,2018 by Thomas E. Dickey
@@ -517,7 +517,7 @@ scrollInMargins(XtermWidget xw, int amount, int top)
 	for (row = top; row <= screen->bot_marg - amount; ++row) {
 	    if ((src = getLineData(screen, row + amount)) != 0
 		&& (dst = getLineData(screen, row)) != 0) {
-		CopyCells(screen, src, dst, left, length);
+		CopyCells(screen, src, dst, left, length, False);
 	    }
 	}
 	while (row <= screen->bot_marg) {
@@ -528,7 +528,7 @@ scrollInMargins(XtermWidget xw, int amount, int top)
 	for (row = screen->bot_marg; row >= top - amount; --row) {
 	    if ((src = getLineData(screen, row + amount)) != 0
 		&& (dst = getLineData(screen, row)) != 0) {
-		CopyCells(screen, src, dst, left, length);
+		CopyCells(screen, src, dst, left, length, True);
 	    }
 	}
 	while (row >= top) {
@@ -580,6 +580,7 @@ xtermScroll(XtermWidget xw, int amount)
     int i;
     int refreshtop = 0;
     int refreshheight;
+    Boolean save_wrap = screen->do_wrap;
     int left = ScrnLeftMargin(xw);
     int right = ScrnRightMargin(xw);
     Boolean scroll_all_lines = (Boolean) (screen->scrollWidget
@@ -646,8 +647,7 @@ xtermScroll(XtermWidget xw, int amount)
 	    ScrollSelection(screen, -(amount), False);
 	    if (amount == i) {
 		ClearScreen(xw);
-		screen->cursor_busy -= 1;
-		return;
+		goto done;
 	    }
 
 	    shift = INX2ROW(screen, 0);
@@ -743,6 +743,8 @@ xtermScroll(XtermWidget xw, int amount)
 		    False);
     }
 
+  done:
+    screen->do_wrap = save_wrap;
     screen->cursor_busy -= 1;
     return;
 }

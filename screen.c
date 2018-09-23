@@ -1,4 +1,4 @@
-/* $XTermId: screen.c,v 1.537 2018/08/09 08:23:24 tom Exp $ */
+/* $XTermId: screen.c,v 1.564 2018/09/21 22:26:00 tom Exp $ */
 
 /*
  * Copyright 1999-2017,2018 by Thomas E. Dickey
@@ -703,28 +703,75 @@ ChangeToWide(XtermWidget xw)
 }
 #endif
 
+#define ClearCell(d) \
+	do { \
+	    dst->charData[d] = ' '; \
+	    dst->attribs[d] = src->attribs[d]; \
+	    if_OPT_ISO_COLORS(screen, { \
+		dst->color[d] = src->color[d]; \
+	    )}; \
+	    if_OPT_WIDE_CHARS(screen, { \
+		dst->combSize = 0; \
+	    }); \
+	} while (0)
+
 /*
  * Copy cells, no side-effects.
  */
 void
-CopyCells(TScreen *screen, LineData *src, LineData *dst, int col, int len)
+CopyCells(TScreen *screen, LineData *src, LineData *dst, int col, int len, Boolean down)
 {
     (void) screen;
+    (void) down;
 
     if (len > 0) {
 	int n;
 	int last = col + len;
+#if OPT_WIDE_CHARS
+	int fix_l = -1;
+	int fix_r = -1;
+#endif
 
+	/*
+	 * If the copy overwrites a double-width character which has one half
+	 * outside the margin, then we will replace both cells with blanks.
+	 */
 	if_OPT_WIDE_CHARS(screen, {
-	    if (col > 0 &&
-		((dst->charData[col] == HIDDEN_CHAR) ^
-		 (src->charData[col] == HIDDEN_CHAR))) {
-		dst->charData[col - 1] = ' ';
+	    if (col > 0) {
+		if (dst->charData[col] == HIDDEN_CHAR) {
+		    if (down) {
+			ClearCell(col - 1);
+			ClearCell(col);
+		    } else {
+			if (src->charData[col] != HIDDEN_CHAR) {
+			    ClearCell(col - 1);
+			    ClearCell(col);
+			} else {
+			    fix_l = col - 1;
+			}
+		    }
+		} else if (src->charData[col] == HIDDEN_CHAR) {
+		    ClearCell(col - 1);
+		    ClearCell(col);
+		    ++col;
+		}
 	    }
-	    if (last < src->lineSize &&
-		((dst->charData[last] == HIDDEN_CHAR) ^
-		 (src->charData[last] == HIDDEN_CHAR))) {
-		dst->charData[last] = ' ';
+	    if (last < src->lineSize) {
+		if (dst->charData[last] == HIDDEN_CHAR) {
+		    if (down) {
+			ClearCell(last - 1);
+			ClearCell(last);
+		    } else {
+			if (src->charData[last] != HIDDEN_CHAR) {
+			    ClearCell(last);
+			} else {
+			    fix_r = last - 1;
+			}
+		    }
+		} else if (src->charData[last] == HIDDEN_CHAR) {
+		    last--;
+		    ClearCell(last);
+		}
 	    }
 	});
 
@@ -738,12 +785,24 @@ CopyCells(TScreen *screen, LineData *src, LineData *dst, int col, int len)
 		dst->color[n] = src->color[n];
 	    }
 	});
+
 	if_OPT_WIDE_CHARS(screen, {
 	    size_t off;
 	    for (n = col; n < last; ++n) {
 		for_each_combData(off, src) {
 		    dst->combData[off][n] = src->combData[off][n];
 		}
+	    }
+	});
+
+	if_OPT_WIDE_CHARS(screen, {
+	    if (fix_l >= 0) {
+		ClearCell(fix_l);
+		ClearCell(fix_l + 1);
+	    }
+	    if (fix_r >= 0) {
+		ClearCell(fix_r);
+		ClearCell(fix_r + 1);
 	    }
 	});
     }
@@ -840,6 +899,7 @@ void
 ScrnDisownSelection(XtermWidget xw)
 {
     if (ScrnHaveSelection(TScreenOf(xw))) {
+	TRACE(("ScrnDisownSelection\n"));
 	if (TScreenOf(xw)->keepSelection) {
 	    UnhiliteSelection(xw);
 	} else {
@@ -2713,8 +2773,19 @@ xtermCheckRect(XtermWidget xw,
     TScreen *screen = TScreenOf(xw);
     XTermRect target;
     LineData *ld;
+    int total = 0;
+    int trimmed = 0;
+    int mode = screen->checksum_ext;
 
-    *result = 0;
+    TRACE(("xtermCheckRect: %s%s%s%s%s%s%s\n",
+	   (mode == csDEC) ? "DEC" : "checksumExtension",
+	   (mode & csPOSITIVE) ? " !negative" : "",
+	   (mode & csATTRIBS) ? " !attribs" : "",
+	   (mode & csNOTRIM) ? " !trimmed" : "",
+	   (mode & csDRAWN) ? " !drawn" : "",
+	   (mode & csBYTE) ? " !byte" : "",
+	   (mode & cs8TH) ? " !7bit" : ""));
+
     if (nparam > 2) {
 	nparam -= 2;
 	params += 2;
@@ -2724,6 +2795,9 @@ xtermCheckRect(XtermWidget xw,
 	int top = target.top - 1;
 	int bottom = target.bottom - 1;
 	int row, col;
+	Boolean first = True;
+	int embedded = 0;
+	DECNRCM_codes my_GR = screen->gsets[(int) screen->curgr];
 
 	for (row = top; row <= bottom; ++row) {
 	    int left = (target.left - 1);
@@ -2733,20 +2807,62 @@ xtermCheckRect(XtermWidget xw,
 	    if (ld == 0)
 		continue;
 	    for (col = left; col <= right && col < ld->lineSize; ++col) {
-		if (ld->attribs[col] & CHARDRAWN) {
-		    *result += (int) ld->charData[col];
+		int ch = ((ld->attribs[col] & CHARDRAWN)
+			  ? (int) ld->charData[col]
+			  : ' ');
+		if (!(mode & csBYTE)) {
+		    unsigned c2 = (unsigned) ch;
+		    if (c2 > 0x7f && my_GR != nrc_ASCII) {
+			c2 = xtermCharSetIn(xw, c2, my_GR);
+			if (!(mode & cs8TH) && (c2 < 0x80))
+			    c2 |= 0x80;
+		    }
+		    ch = (c2 & 0xff);
+		}
+		if (!(mode & csATTRIBS)) {
+		    if (ld->attribs[col] & UNDERLINE)
+			ch += 0x10;
+		    if (ld->attribs[col] & INVERSE)
+			ch += 0x20;
+		    if (ld->attribs[col] & BLINK)
+			ch += 0x40;
+		    if (ld->attribs[col] & BOLD)
+			ch += 0x80;
+		}
+		if (first || (ch != ' ') || (ld->attribs[col] & DRAWX_MASK)) {
+		    trimmed += ch + embedded;
+		    embedded = 0;
+		} else if (ch == ' ') {
+		    if ((mode & csNOTRIM))
+			embedded += ch;
+		}
+		if ((ld->attribs[col] & CHARDRAWN)) {
+		    total += ch;
 		    if_OPT_WIDE_CHARS(screen, {
-			size_t off;
-			for_each_combData(off, ld) {
-			    *result += (int) ld->combData[off][col];
+			/* FIXME - not counted if trimming blanks */
+			if (!(mode & csBYTE)) {
+			    size_t off;
+			    for_each_combData(off, ld) {
+				total += (int) ld->combData[off][col];
+			    }
 			}
 		    })
-		} else {
-		    *result += ' ';
+		} else if (!(mode & csDRAWN)) {
+		    total += ch;
 		}
+		first = ((mode & csNOTRIM) != 0) ? True : False;
+	    }
+	    if (!(mode & csNOTRIM)) {
+		embedded = 0;
+		first = False;
 	    }
 	}
     }
+    if (!(mode & csNOTRIM))
+	total = trimmed;
+    if (!(mode & csPOSITIVE))
+	total = -total;
+    *result = total;
 }
 #endif /* OPT_DEC_RECTOPS */
 

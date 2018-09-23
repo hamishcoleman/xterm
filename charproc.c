@@ -1,4 +1,4 @@
-/* $XTermId: charproc.c,v 1.1579 2018/08/14 00:01:50 tom Exp $ */
+/* $XTermId: charproc.c,v 1.1608 2018/09/21 18:18:27 tom Exp $ */
 
 /*
  * Copyright 1999-2017,2018 by Thomas E. Dickey
@@ -609,6 +609,10 @@ static XtResource xterm_resources[] =
     Ires(XtNcacheDoublesize, XtCCacheDoublesize, screen.cache_doublesize, NUM_CHRSET),
 #endif
 
+#if OPT_DEC_RECTOPS
+    Ires(XtNchecksumExtension, XtCChecksumExtension, screen.checksum_ext0, csDEC),
+#endif
+
 #if OPT_HIGHLIGHT_COLOR
     Tres(XtNhighlightColor, XtCHighlightColor, HIGHLIGHT_BG, XtDefaultForeground),
     Tres(XtNhighlightTextColor, XtCHighlightTextColor, HIGHLIGHT_FG, XtDefaultBackground),
@@ -1159,15 +1163,39 @@ setItalicFont(XtermWidget xw, Bool enable)
 }
 #endif
 
+static void
+initCharset(TScreen *screen, int which, DECNRCM_codes code)
+{
+    screen->gsets[which] = code;
+}
+
+void
+saveCharsets(TScreen *screen, DECNRCM_codes * target)
+{
+    int g;
+    for (g = 0; g < NUM_GSETS; ++g) {
+	target[g] = screen->gsets[g];
+    }
+}
+
+void
+restoreCharsets(TScreen *screen, DECNRCM_codes * source)
+{
+    int g;
+    for (g = 0; g < NUM_GSETS; ++g) {
+	screen->gsets[g] = source[g];
+    }
+}
+
 void
 resetCharsets(TScreen *screen)
 {
     TRACE(("resetCharsets\n"));
 
-    screen->gsets[0] = nrc_ASCII;
-    screen->gsets[1] = nrc_ASCII;
-    screen->gsets[2] = nrc_ASCII;
-    screen->gsets[3] = nrc_ASCII;
+    initCharset(screen, 0, nrc_ASCII);
+    initCharset(screen, 1, nrc_ASCII);
+    initCharset(screen, 2, nrc_ASCII);
+    initCharset(screen, 3, nrc_ASCII);
 
     screen->curgl = 0;		/* G0 => GL.            */
     screen->curgr = 2;		/* G2 => GR.            */
@@ -1175,7 +1203,7 @@ resetCharsets(TScreen *screen)
 
 #if OPT_VT52_MODE
     if (screen->vtXX_level == 0)
-	screen->gsets[1] = nrc_DEC_Spec_Graphic;	/* Graphics */
+	initCharset(screen, 1, nrc_DEC_Spec_Graphic);	/* Graphics */
 #endif
 }
 
@@ -1214,13 +1242,13 @@ set_ansi_conformance(TScreen *screen, int level)
 	case 1:
 	    /* FALLTHRU */
 	case 2:
-	    screen->gsets[0] = nrc_ASCII;	/* G0 is ASCII */
-	    screen->gsets[1] = nrc_ASCII;	/* G1 is ISO Latin-1 */
+	    initCharset(screen, 0, nrc_ASCII);	/* G0 is ASCII */
+	    initCharset(screen, 1, nrc_ASCII);	/* G1 is ISO Latin-1 */
 	    screen->curgl = 0;
 	    screen->curgr = 1;
 	    break;
 	case 3:
-	    screen->gsets[0] = nrc_ASCII;	/* G0 is ASCII */
+	    initCharset(screen, 0, nrc_ASCII);	/* G0 is ASCII */
 	    screen->curgl = 0;
 	    break;
 	}
@@ -1364,6 +1392,7 @@ static const struct {
 #if OPT_WIDE_CHARS
 	,DATA(esc_pct_table)
 	,DATA(scs_pct_table)
+	,DATA(scs_2qt_table)
 #endif
 #if OPT_VT52_MODE
 	,DATA(vt52_table)
@@ -1676,20 +1705,22 @@ static struct {
     { nrc_French_Canadian2,  0,   '9', 3, 9, 1 },
     { nrc_Norwegian_Danish,  0,   '`', 3, 9, 1 },
     { nrc_Portugese,         '%', '6', 3, 9, 1 },
-#if 0
+    /* VT5xx */
+    { nrc_Greek,             '"', '>', 5, 9, 1 },
+    { nrc_Hebrew,            '%', '=', 5, 9, 1 },
+    { nrc_Turkish,	     '%', '2', 5, 9, 1 },
+    { nrc_DEC_Greek_Supp,    '"', '?', 5, 9, 0 },
+    { nrc_DEC_Hebrew_Supp,   '"', '4', 5, 9, 0 },
+    { nrc_DEC_Turkish_Supp,  '%', '0', 5, 9, 0 },
+    { nrc_ISO_Greek_Supp,    0,   'F', 5, 9, 0 },
+    { nrc_ISO_Hebrew_Supp,   0,   'H', 5, 9, 0 },
+    { nrc_ISO_Latin_5_Supp,  0,   'M', 5, 9, 0 },
+    { nrc_ISO_Latin_Cyrillic,0,   'L', 5, 9, 0 },
     /* VT5xx (not implemented) */
+#if 0
     { nrc_Cyrillic,          '&', '4', 5, 9, 0 },
-    { nrc_Greek,             '"', '?', 5, 9, 0 },
-    { nrc_Greek_Supp,        0,   'F', 5, 9, 0 },
-    { nrc_Hebrew,            '"', '4', 5, 9, 0 },
-    { nrc_Hebrew2,           '%', '=', 5, 9, 1 },
-    { nrc_Hebrew_Supp,       0,   'H', 5, 9, 0 },
-    { nrc_Latin_5_Supp,      0,   'M', 5, 9, 0 },
-    { nrc_Latin_Cyrillic,    0,   'L', 5, 9, 0 },
     { nrc_Russian,           '&', '5', 5, 9, 1 },
     { nrc_SCS_NRCS,          '%', '3', 5, 9, 0 },
-    { nrc_Turkish,           '%', '0', 5, 9, 0 },
-    { nrc_Turkish2,	     '%', '2', 5, 9, 1 },
 #endif
 };
 /* *INDENT-ON* */
@@ -1734,7 +1765,7 @@ xtermDecodeSCS(XtermWidget xw, int which, int prefix, int suffix)
 	}
     }
     if (result != nrc_Unknown) {
-	screen->gsets[which] = result;
+	initCharset(screen, which, result);
 	TRACE(("setting G%d to %s\n", which, visibleScsCode((int) result)));
     } else {
 	TRACE(("...unknown GSET\n"));
@@ -2502,6 +2533,7 @@ doparsing(XtermWidget xw, unsigned c, struct ParseState *sp)
 	    TRACE(("CASE_VT52_CUP - VT52 cursor addressing\n"));
 	    sp->vt52_cup = True;
 	    InitParams();
+	    ResetState(sp);
 	    break;
 
 	case CASE_VT52_IGNORE:
@@ -2996,7 +3028,13 @@ doparsing(XtermWidget xw, unsigned c, struct ParseState *sp)
 		unparseputc1(xw, ANSI_DCS);
 		unparseputc(xw, '!');
 		unparseputc(xw, '|');
-		unparseputc(xw, '0');
+		/* report the "terminal unit id" as 4 pairs of hexadecimal
+		 * digits -- meaningless for a terminal emulator, but some
+		 * host may care about the format.
+		 */
+		for (count = 0; count < 8; ++count) {
+		    unparseputc(xw, '0');
+		}
 		unparseputc1(xw, ANSI_ST);
 		unparse_end(xw);
 	    }
@@ -3413,7 +3451,7 @@ doparsing(XtermWidget xw, unsigned c, struct ParseState *sp)
 		if (sp->private_function
 		    && screen->vtXX_level >= 4) {	/* VT420 */
 		    init_reply(ANSI_DCS);
-		    reply.a_param[count++] = (ParmType) GetParam(0);	/* PID */
+		    reply.a_param[count++] = (ParmType) GetParam(1);	/* PID */
 		    reply.a_delim = "!~";	/* delimiter */
 		    reply.a_radix[count] = 16;	/* use hex */
 		    reply.a_param[count++] = 0;		/* no data */
@@ -3547,9 +3585,23 @@ doparsing(XtermWidget xw, unsigned c, struct ParseState *sp)
 	    ResetState(sp);
 	    break;
 
+	case CASE_GSETS5:
+	    if (screen->vtXX_level < 5) {
+		ResetState(sp);
+		break;
+	    }
+	    /* FALLTHRU */
+	case CASE_GSETS3:
+	    if (screen->vtXX_level < 3) {
+		ResetState(sp);
+		break;
+	    }
+	    /* FALLTHRU */
 	case CASE_GSETS:
-	    TRACE(("CASE_GSETS(%d) = '%c'\n", sp->scstype, c));
-	    xtermDecodeSCS(xw, sp->scstype, 0, (int) c);
+	    if (screen->vtXX_level >= 2 || strchr("012AB", (int) c) != 0) {
+		TRACE(("CASE_GSETS(%d) = '%c'\n", sp->scstype, c));
+		xtermDecodeSCS(xw, sp->scstype, 0, (int) c);
+	    }
 	    ResetState(sp);
 	    break;
 
@@ -3724,7 +3776,7 @@ doparsing(XtermWidget xw, unsigned c, struct ParseState *sp)
 		screen->curgl = screen->vt52_save_curgl;
 		screen->curgr = screen->vt52_save_curgr;
 		screen->curss = screen->vt52_save_curss;
-		memmove(screen->gsets, screen->vt52_save_gsets, sizeof(screen->gsets));
+		restoreCharsets(screen, screen->vt52_save_gsets);
 	    }
 	    break;
 #endif
@@ -4400,7 +4452,7 @@ doparsing(XtermWidget xw, unsigned c, struct ParseState *sp)
 		    reply_char(count, ';');
 		    reply_char(count, 0x4f);	/* assert all 96's */
 		    reply_char(count, ';');
-		    for (item = 0; item < 4; ++item) {
+		    for (item = 0; item < NUM_GSETS; ++item) {
 			char *temp = encode_scs(screen->gsets[item]);
 			while (*temp != '\0') {
 			    reply_char(count, *temp++);
@@ -4473,6 +4525,16 @@ doparsing(XtermWidget xw, unsigned c, struct ParseState *sp)
 	    TRACE(("CASE_CSI_HASH_STATE\n"));
 	    /* csi hash (#) */
 	    sp->parsestate = csi_hash_table;
+	    break;
+
+	case CASE_XTERM_CHECKSUM:
+#if OPT_DEC_RECTOPS
+	    if (screen->vtXX_level >= 4 && AllowWindowOps(xw, ewSetChecksum)) {
+		TRACE(("CASE_XTERM_CHECKSUM\n"));
+		screen->checksum_ext = zero_if_default(0);
+	    }
+#endif
+	    ResetState(sp);
 	    break;
 
 	case CASE_XTERM_PUSH_SGR:
@@ -4634,14 +4696,29 @@ doparsing(XtermWidget xw, unsigned c, struct ParseState *sp)
 	    ResetState(sp);
 	    break;
 
+	case CASE_SCS_DQUOTE:
+	    TRACE(("CASE_SCS_DQUOTE\n"));
+	    sp->parsestate = scs_2qt_table;
+	    break;
+
+	case CASE_GSETS_DQUOTE:
+	    if (screen->vtXX_level >= 5) {
+		TRACE(("CASE_GSETS_DQUOTE(%d) = '%c'\n", sp->scstype, c));
+		xtermDecodeSCS(xw, sp->scstype, '"', (int) c);
+	    }
+	    ResetState(sp);
+	    break;
+
 	case CASE_SCS_PERCENT:
 	    TRACE(("CASE_SCS_PERCENT\n"));
 	    sp->parsestate = scs_pct_table;
 	    break;
 
 	case CASE_GSETS_PERCENT:
-	    TRACE(("CASE_GSETS_PERCENT(%d) = '%c'\n", sp->scstype, c));
-	    xtermDecodeSCS(xw, sp->scstype, '%', (int) c);
+	    if (screen->vtXX_level >= 3) {
+		TRACE(("CASE_GSETS_PERCENT(%d) = '%c'\n", sp->scstype, c));
+		xtermDecodeSCS(xw, sp->scstype, '%', (int) c);
+	    }
 	    ResetState(sp);
 	    break;
 #endif
@@ -4659,7 +4736,9 @@ doparsing(XtermWidget xw, unsigned c, struct ParseState *sp)
 		for (value = 1; value <= 5; ++value)
 		    set_mod_fkeys(xw, value, DEFAULT, True);
 	    }
+	    ResetState(sp);
 	    break;
+
 	case CASE_SET_MOD_FKEYS0:
 	    TRACE(("CASE_SET_MOD_FKEYS0\n"));
 	    if (nparam >= 1 && GetParam(0) != DEFAULT) {
@@ -4667,6 +4746,7 @@ doparsing(XtermWidget xw, unsigned c, struct ParseState *sp)
 	    } else {
 		xw->keyboard.modify_now.function_keys = -1;
 	    }
+	    ResetState(sp);
 	    break;
 #endif
 	case CASE_HIDE_POINTER:
@@ -4676,6 +4756,7 @@ doparsing(XtermWidget xw, unsigned c, struct ParseState *sp)
 	    } else {
 		screen->pointer_mode = DEF_POINTER_MODE;
 	    }
+	    ResetState(sp);
 	    break;
 
 	case CASE_SM_TITLE:
@@ -4690,6 +4771,7 @@ doparsing(XtermWidget xw, unsigned c, struct ParseState *sp)
 		screen->title_modes = DEF_TITLE_MODES;
 	    }
 	    TRACE(("...title_modes %#x\n", screen->title_modes));
+	    ResetState(sp);
 	    break;
 
 	case CASE_RM_TITLE:
@@ -4704,6 +4786,7 @@ doparsing(XtermWidget xw, unsigned c, struct ParseState *sp)
 		screen->title_modes = DEF_TITLE_MODES;
 	    }
 	    TRACE(("...title_modes %#x\n", screen->title_modes));
+	    ResetState(sp);
 	    break;
 
 	case CASE_CSI_IGNORE:
@@ -5315,12 +5398,16 @@ WrapLine(XtermWidget xw)
 }
 
 /*
- * process a string of characters according to the character set indicated
- * by charset.  worry about end of line conditions (wraparound if selected).
+ * Process a string of characters according to the character set indicated by
+ * charset.  Worry about end of line conditions (wraparound if selected).
+ *
+ * It is possible to use CUP, etc., to move outside margins.  In that case, the
+ * right-margin is ineffective until the text (may) wrap and get within the
+ * margins.
  */
 void
 dotext(XtermWidget xw,
-       int charset,
+       DECNRCM_codes charset,
        IChar *buf,		/* start of characters to process */
        Cardinal len)		/* end */
 {
@@ -5332,15 +5419,8 @@ dotext(XtermWidget xw,
     int next_col, this_col;	/* must be signed */
 #endif
     Cardinal offset;
-    int right = ScrnRightMargin(xw);
+    int rmargin = ScrnRightMargin(xw);
 
-    /*
-     * It is possible to use CUP, etc., to move outside margins.  In that
-     * case, the right-margin is ineffective.
-     */
-    if (screen->cur_col > right) {
-	right = screen->max_col;
-    }
 #if OPT_WIDE_CHARS
     if (screen->vt100_graphics)
 #endif
@@ -5361,23 +5441,28 @@ dotext(XtermWidget xw,
     for (offset = 0;
 	 offset < len && (chars_chomped > 0 || screen->do_wrap);
 	 offset += chars_chomped) {
-	int width_available = right + 1 - screen->cur_col;
 	int width_here = 0;
-	Boolean force_wrap;
-	Boolean need_wrap;
-	Boolean did_wrap;
 	int last_chomp = 0;
-	chars_chomped = 0;
+	Boolean force_wrap;
 
+	chars_chomped = 0;
 	do {
+	    int right = ((screen->cur_col > rmargin)
+			 ? screen->max_col
+			 : rmargin);
+	    int width_available = right + 1 - screen->cur_col;
+	    Boolean need_wrap = False;
+	    Boolean did_wrap = False;
+
 	    force_wrap = False;
-	    need_wrap = False;
-	    did_wrap = False;
 
 	    if (screen->do_wrap) {
 		screen->do_wrap = False;
 		if ((xw->flags & WRAPAROUND)) {
 		    WrapLine(xw);
+		    right = ((screen->cur_col > rmargin)
+			     ? screen->max_col
+			     : rmargin);
 		    width_available = right + 1 - screen->cur_col;
 		    next_col = screen->cur_col;
 		    did_wrap = True;
@@ -5496,6 +5581,9 @@ dotext(XtermWidget xw,
 #if OPT_DEC_CHRSET
 	CLineData *ld = getLineData(screen, screen->cur_row);
 #endif
+	int right = ((screen->cur_col > rmargin)
+		     ? screen->max_col
+		     : rmargin);
 
 	int last_col = LineMaxCol(screen, ld);
 	if (last_col > right)
@@ -5779,7 +5867,7 @@ dpmodes(XtermWidget xw, BitFunc func)
 		screen->vt52_save_curgl = screen->curgl;
 		screen->vt52_save_curgr = screen->curgr;
 		screen->vt52_save_curss = screen->curss;
-		memmove(screen->vt52_save_gsets, screen->gsets, sizeof(screen->gsets));
+		saveCharsets(screen, screen->vt52_save_gsets);
 		resetCharsets(screen);
 		InitParams();	/* ignore the remaining params, if any */
 	    }
@@ -8293,6 +8381,7 @@ VTInitialize(Widget wrequest,
 	,DATA(GetSelection)
 	,DATA(SetSelection)
 	,DATA(GetChecksum)
+	,DATA(SetChecksum)
 	,DATA_END
     };
 #undef DATA
@@ -8832,6 +8921,10 @@ VTInitialize(Widget wrequest,
     TRACE(("Doublesize%s enabled, up to %d fonts\n",
 	   screen->font_doublesize ? "" : " not",
 	   screen->cache_doublesize));
+#endif
+#if OPT_DEC_RECTOPS
+    init_Ires(screen.checksum_ext0);
+    screen->checksum_ext = screen->checksum_ext0;
 #endif
 
 #if OPT_ISO_COLORS
@@ -11549,6 +11642,9 @@ ReallyReset(XtermWidget xw, Bool full, Bool saved)
     /* Reset modifier-resources to initial state */
     xw->keyboard.modify_now = xw->keyboard.modify_1st;
 #endif
+#if OPT_DEC_RECTOPS
+    screen->checksum_ext = screen->checksum_ext0;
+#endif
 
     /* Reset DECSCA */
     bitclr(&xw->flags, PROTECTED);
@@ -12126,76 +12222,83 @@ VTInitTranslations(void)
 	const char *name;
 	const char *value;
     } table[] = {
-	{
-	    False,
-	    "default",
+#define DATA(name,value) { False, name, value }
+	DATA("select",
 "\
-          Shift <KeyPress> Prior:scroll-back(1,halfpage) \n\
-           Shift <KeyPress> Next:scroll-forw(1,halfpage) \n\
          Shift <KeyPress> Select:select-cursor-start() select-cursor-end(SELECT, CUT_BUFFER0) \n\
          Shift <KeyPress> Insert:insert-selection(SELECT, CUT_BUFFER0) \n\
 "
-	},
+	),
 #if OPT_MAXIMIZE
-	{
-	    False,
-	    "fullscreen",
+	DATA("fullscreen",
 "\
                  Alt <Key>Return:fullscreen() \n\
 "
-	},
+	),
 #endif
 #if OPT_SCROLL_LOCK
-	{
-	    False,
-	    "scroll-lock",
+	DATA("scroll-lock",
 "\
         <KeyRelease> Scroll_Lock:scroll-lock() \n\
 "
-	},
+	),
 #endif
 #if OPT_SHIFT_FONTS
-	{
-	    False,
-	    "shift-fonts",
+	DATA("shift-fonts",
 "\
     Shift~Ctrl <KeyPress> KP_Add:larger-vt-font() \n\
     Shift Ctrl <KeyPress> KP_Add:smaller-vt-font() \n\
     Shift <KeyPress> KP_Subtract:smaller-vt-font() \n\
 "
-	},
+	),
 #endif
-	/* PROCURA added "Meta <Btn2Down>:clear-saved-lines()" */
-	{
-	    False,
-	    "default",
+	DATA("paging",
+"\
+          Shift <KeyPress> Prior:scroll-back(1,halfpage) \n\
+           Shift <KeyPress> Next:scroll-forw(1,halfpage) \n\
+"
+	),
+	/* This must be the last set mentioning "KeyPress" */
+	DATA("keypress",
 "\
                 ~Meta <KeyPress>:insert-seven-bit() \n\
                  Meta <KeyPress>:insert-eight-bit() \n\
+"
+	),
+	DATA("popup-menu",
+"\
                 !Ctrl <Btn1Down>:popup-menu(mainMenu) \n\
            !Lock Ctrl <Btn1Down>:popup-menu(mainMenu) \n\
  !Lock Ctrl @Num_Lock <Btn1Down>:popup-menu(mainMenu) \n\
      ! @Num_Lock Ctrl <Btn1Down>:popup-menu(mainMenu) \n\
-                ~Meta <Btn1Down>:select-start() \n\
-              ~Meta <Btn1Motion>:select-extend() \n\
                 !Ctrl <Btn2Down>:popup-menu(vtMenu) \n\
            !Lock Ctrl <Btn2Down>:popup-menu(vtMenu) \n\
  !Lock Ctrl @Num_Lock <Btn2Down>:popup-menu(vtMenu) \n\
      ! @Num_Lock Ctrl <Btn2Down>:popup-menu(vtMenu) \n\
-          ~Ctrl ~Meta <Btn2Down>:ignore() \n\
-                 Meta <Btn2Down>:clear-saved-lines() \n\
-            ~Ctrl ~Meta <Btn2Up>:insert-selection(SELECT, CUT_BUFFER0) \n\
                 !Ctrl <Btn3Down>:popup-menu(fontMenu) \n\
            !Lock Ctrl <Btn3Down>:popup-menu(fontMenu) \n\
  !Lock Ctrl @Num_Lock <Btn3Down>:popup-menu(fontMenu) \n\
      ! @Num_Lock Ctrl <Btn3Down>:popup-menu(fontMenu) \n\
+"
+	),
+	/* PROCURA added "Meta <Btn2Down>:clear-saved-lines()" */
+	DATA("reset",
+"\
+                 Meta <Btn2Down>:clear-saved-lines() \n\
+"
+	),
+	DATA("select",
+"\
+                ~Meta <Btn1Down>:select-start() \n\
+              ~Meta <Btn1Motion>:select-extend() \n\
+          ~Ctrl ~Meta <Btn2Down>:ignore() \n\
+            ~Ctrl ~Meta <Btn2Up>:insert-selection(SELECT, CUT_BUFFER0) \n\
           ~Ctrl ~Meta <Btn3Down>:start-extend() \n\
               ~Meta <Btn3Motion>:select-extend() \n\
+                         <BtnUp>:select-end(SELECT, CUT_BUFFER0) \n\
 "
-	},
-	{
-	    False,
-	    "wheel-mouse",
+	),
+	DATA("wheel-mouse",
 "\
                  Ctrl <Btn4Down>:scroll-back(1,halfpage,m) \n\
             Lock Ctrl <Btn4Down>:scroll-back(1,halfpage,m) \n\
@@ -12208,16 +12311,14 @@ VTInitTranslations(void)
        @Num_Lock Ctrl <Btn5Down>:scroll-forw(1,halfpage,m) \n\
                       <Btn5Down>:scroll-forw(5,line,m)     \n\
 "
-	},
-	{
-	    False,
-	    "default",
+	),
+	DATA("default",
 "\
-                         <BtnUp>:select-end(SELECT, CUT_BUFFER0) \n\
-                       <BtnDown>:ignore() \
+                       <BtnDown>:ignore() \n\
 "
-	}
+	)
     };
+#undef DATA
     /* *INDENT-ON* */
 
     char *result = 0;
@@ -12260,7 +12361,7 @@ VTInitTranslations(void)
 				     (unsigned) len) == 0) {
 		    table[item].wanted = False;
 		    TRACE(("omit(%s):\n%s\n", table[item].name, table[item].value));
-		    break;
+		    /* continue: "select", for instance is two chunks */
 		}
 	    }
 	    free(value);

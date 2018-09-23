@@ -1,4 +1,4 @@
-/* $XTermId: button.c,v 1.532 2018/07/07 13:25:23 tom Exp $ */
+/* $XTermId: button.c,v 1.540 2018/09/18 01:12:14 tom Exp $ */
 
 /*
  * Copyright 1999-2017,2018 by Thomas E. Dickey
@@ -110,12 +110,14 @@ button.c	Handles button events in the terminal emulator.
 	getLineData(screen, ROW2INX(screen, row))
 
     /*
-     * We reserve shift modifier for cut/paste operations.  In principle we
-     * can pass through control and meta modifiers, but in practice, the
-     * popup menu uses control, and the window manager is likely to use meta,
-     * so those events are not delivered to SendMousePosition.
+     * We reserve shift modifier for cut/paste operations.
+     *
+     * In principle we can pass through control and meta modifiers, but in
+     * practice, the popup menu uses control, and the window manager is likely
+     * to use meta, so those events usually are not delivered to
+     * SendMousePosition.
      */
-#define OurModifiers (ShiftMask | ControlMask | Mod1Mask)
+#define OurModifiers (ShiftMask)
 #define AllModifiers (ShiftMask | LockMask | ControlMask | Mod1Mask | \
 		      Mod2Mask | Mod3Mask | Mod4Mask | Mod5Mask)
 
@@ -1091,7 +1093,7 @@ HandleSelectExtend(Widget w,
 	TScreen *screen = TScreenOf(xw);
 	CELL cell;
 
-	TRACE(("HandleSelectExtend @%ld\n", event->xmotion.time));
+	TRACE_EVENT("HandleSelectExtend", event, params, num_params);
 
 	screen->selection_time = event->xmotion.time;
 	switch (screen->eventMode) {
@@ -1126,7 +1128,7 @@ HandleKeyboardSelectExtend(Widget w,
     if ((xw = getXtermWidget(w)) != 0) {
 	TScreen *screen = TScreenOf(xw);
 
-	TRACE(("HandleKeyboardSelectExtend\n"));
+	TRACE_EVENT("HandleKeyboardSelectExtend", event, params, num_params);
 	ExtendExtend(xw, &screen->cursorp);
     }
 }
@@ -1165,7 +1167,7 @@ HandleSelectEnd(Widget w,
     XtermWidget xw;
 
     if ((xw = getXtermWidget(w)) != 0) {
-	TRACE(("HandleSelectEnd\n"));
+	TRACE_EVENT("HandleSelectEnd", event, params, num_params);
 	do_select_end(xw, event, params, num_params, False);
     }
 }
@@ -1179,7 +1181,7 @@ HandleKeyboardSelectEnd(Widget w,
     XtermWidget xw;
 
     if ((xw = getXtermWidget(w)) != 0) {
-	TRACE(("HandleKeyboardSelectEnd\n"));
+	TRACE_EVENT("HandleKeyboardSelectEnd", event, params, num_params);
 	do_select_end(xw, event, params, num_params, True);
     }
 }
@@ -1196,7 +1198,7 @@ HandleCopySelection(Widget w,
     XtermWidget xw;
 
     if ((xw = getXtermWidget(w)) != 0) {
-	TRACE(("HandleCopySelection\n"));
+	TRACE_EVENT("HandleCopySelection", event, params, num_params);
 	SelectSet(xw, event, params, *num_params);
     }
 }
@@ -1850,8 +1852,9 @@ base64_flush(TScreen *screen)
  * Translate ISO-8859-1 or UTF-8 data to NRCS.
  */
 static void
-ToNational(TScreen *screen, Char *buffer, unsigned *length)
+ToNational(XtermWidget xw, Char *buffer, unsigned *length)
 {
+    TScreen *screen = TScreenOf(xw);
     int gsetL = screen->gsets[screen->curgl];
     int gsetR = screen->gsets[screen->curgr];
 
@@ -1875,9 +1878,9 @@ ToNational(TScreen *screen, Char *buffer, unsigned *length)
 	    data->next += data->utf_size;
 	    chr = data->utf_data;
 	    out = chr;
-	    if ((gl = xtermCharSetIn(screen, chr, gsetL)) != chr) {
+	    if ((gl = xtermCharSetIn(xw, chr, gsetL)) != chr) {
 		out = gl;
-	    } else if ((gr = xtermCharSetIn(screen, chr, gsetR)) != chr) {
+	    } else if ((gr = xtermCharSetIn(xw, chr, gsetR)) != chr) {
 		out = gr;
 	    }
 	    *p++ = (Char) ((out < 256) ? out : ' ');
@@ -1893,9 +1896,9 @@ ToNational(TScreen *screen, Char *buffer, unsigned *length)
 	    unsigned gl, gr;
 	    unsigned chr = *p;
 	    unsigned out = chr;
-	    if ((gl = xtermCharSetIn(screen, chr, gsetL)) != chr) {
+	    if ((gl = xtermCharSetIn(xw, chr, gsetL)) != chr) {
 		out = gl;
-	    } else if ((gr = xtermCharSetIn(screen, chr, gsetR)) != chr) {
+	    } else if ((gr = xtermCharSetIn(xw, chr, gsetR)) != chr) {
 		out = gr;
 	    }
 	    *p = (Char) out;
@@ -1917,7 +1920,7 @@ _qWriteSelectionData(XtermWidget xw, Char *lag, unsigned length)
      * in the same buffer because the target is always 8-bit.
      */
     if ((xw->flags & NATIONAL) && (length != 0)) {
-	ToNational(screen, lag, &length);
+	ToNational(xw, lag, &length);
     }
 #if OPT_PASTE64
     if (screen->base64_paste) {
@@ -2313,7 +2316,7 @@ HandleInsertSelection(Widget w,
     XtermWidget xw;
 
     if ((xw = getXtermWidget(w)) != 0) {
-	TRACE(("HandleInsertSelection\n"));
+	TRACE_EVENT("HandleInsertSelection", event, params, num_params);
 	if (!SendMousePosition(xw, event)) {
 #if OPT_READLINE
 	    int ldelta;
@@ -2401,7 +2404,7 @@ HandleSelectStart(Widget w,
 	TScreen *screen = TScreenOf(xw);
 	CELL cell;
 
-	TRACE(("HandleSelectStart\n"));
+	TRACE_EVENT("HandleSelectStart", event, params, num_params);
 	screen->firstValidRow = 0;
 	screen->lastValidRow = screen->max_row;
 	PointToCELL(screen, event->xbutton.y, event->xbutton.x, &cell);
@@ -2426,7 +2429,7 @@ HandleKeyboardSelectStart(Widget w,
     if ((xw = getXtermWidget(w)) != 0) {
 	TScreen *screen = TScreenOf(xw);
 
-	TRACE(("HandleKeyboardSelectStart\n"));
+	TRACE_EVENT("HandleKeyboardSelectStart", event, params, num_params);
 	do_select_start(xw, event, &screen->cursorp);
     }
 }
@@ -2517,6 +2520,7 @@ EndExtend(XtermWidget xw,
     CELL cell;
     TScreen *screen = TScreenOf(xw);
 
+    TRACE_EVENT("EndExtend", event, params, &num_params);
     if (use_cursor_loc) {
 	cell = screen->cursorp;
     } else {
@@ -2611,7 +2615,7 @@ HandleSelectSet(Widget w,
     XtermWidget xw;
 
     if ((xw = getXtermWidget(w)) != 0) {
-	TRACE(("HandleSelectSet\n"));
+	TRACE_EVENT("HandleSelectSet", event, params, num_params);
 	SelectSet(xw, event, params, *num_params);
     }
 }
@@ -2625,7 +2629,6 @@ SelectSet(XtermWidget xw,
 {
     TScreen *screen = TScreenOf(xw);
 
-    TRACE(("SelectSet\n"));
     /* Only do select stuff if non-null select */
     if (!isSameCELL(&(screen->startSel), &(screen->endSel))) {
 	SaltTextAway(xw, &(screen->startSel), &(screen->endSel));
@@ -2748,7 +2751,7 @@ HandleStartExtend(Widget w,
     XtermWidget xw;
 
     if ((xw = getXtermWidget(w)) != 0) {
-	TRACE(("HandleStartExtend\n"));
+	TRACE_EVENT("HandleStartExtend", event, params, num_params);
 	do_start_extend(xw, event, params, num_params, False);
     }
 }
@@ -2762,7 +2765,7 @@ HandleKeyboardStartExtend(Widget w,
     XtermWidget xw;
 
     if ((xw = getXtermWidget(w)) != 0) {
-	TRACE(("HandleKeyboardStartExtend\n"));
+	TRACE_EVENT("HandleKeyboardStartExtend", event, params, num_params);
 	do_start_extend(xw, event, params, num_params, True);
     }
 }
@@ -4121,7 +4124,8 @@ ConvertSelection(Widget w,
 
     screen = TScreenOf(xw);
 
-    TRACE(("ConvertSelection %s\n",
+    TRACE(("ConvertSelection %s -> %s\n",
+	   TraceAtomName(screen->display, *selection),
 	   visibleSelectionTarget(dpy, *target)));
 
     if (keepClipboard(*selection)) {
@@ -4333,6 +4337,22 @@ SelectionDone(Widget w GCC_UNUSED,
 }
 
 static void
+_DisownSelection(XtermWidget xw)
+{
+    TScreen *screen = TScreenOf(xw);
+
+    if (screen->owned_atom != 0
+	&& screen->owned_time != 0) {
+	TRACE(("XtDisownSelection(%s, @%ld)\n",
+	       TraceAtomName(screen->display, screen->owned_atom),
+	       (long) screen->owned_time));
+	XtDisownSelection((Widget) xw, screen->owned_atom, screen->owned_time);
+	screen->owned_atom = 0;
+	screen->owned_time = 0;
+    }
+}
+
+static void
 _OwnSelection(XtermWidget xw,
 	      String *selections,
 	      Cardinal count)
@@ -4396,8 +4416,16 @@ _OwnSelection(XtermWidget xw,
 	    screen->clipboard_data = buf;
 	    screen->clipboard_size = screen->selection_length;
 	} else if (screen->selection_length == 0) {
-	    XtDisownSelection((Widget) xw, atoms[i], screen->selection_time);
-	} else if (!screen->replyToEmacs) {
+	    _DisownSelection(xw);
+	} else if (!screen->replyToEmacs && atoms[i] != 0) {
+	    if (screen->owned_atom != atoms[i]) {
+		_DisownSelection(xw);
+	    }
+	    TRACE(("XtOwnSelection(%s, @%ld)\n",
+		   TraceAtomName(screen->display, atoms[i]),
+		   (long) screen->selection_time));
+	    screen->owned_atom = atoms[i];
+	    screen->owned_time = screen->selection_time;
 	    have_selection |=
 		XtOwnSelection((Widget) xw, atoms[i],
 			       screen->selection_time,
@@ -5371,7 +5399,7 @@ HandleExecFormatted(Widget w,
 {
     XtermWidget xw;
 
-    TRACE(("HandleExecFormatted(%d)\n", *num_params));
+    TRACE_EVENT("HandleExecFormatted", event, params, num_params);
     if ((xw = getXtermWidget(w)) != 0 &&
 	(*num_params > 1)) {
 	doSelectionFormat(xw, w, event, params, num_params, reallyExecFormatted);
@@ -5387,7 +5415,7 @@ HandleExecSelectable(Widget w,
     XtermWidget xw;
 
     if ((xw = getXtermWidget(w)) != 0) {
-	TRACE(("HandleExecSelectable(%d)\n", *num_params));
+	TRACE_EVENT("HandleExecSelectable", event, params, num_params);
 
 	if (*num_params == 2) {
 	    CELL start, finish;
@@ -5437,7 +5465,7 @@ HandleInsertFormatted(Widget w,
 {
     XtermWidget xw;
 
-    TRACE(("HandleInsertFormatted(%d)\n", *num_params));
+    TRACE_EVENT("HandleInsertFormatted", event, params, num_params);
     if ((xw = getXtermWidget(w)) != 0 &&
 	(*num_params > 1)) {
 	doSelectionFormat(xw, w, event, params, num_params, reallyInsertFormatted);
@@ -5453,7 +5481,7 @@ HandleInsertSelectable(Widget w,
     XtermWidget xw;
 
     if ((xw = getXtermWidget(w)) != 0) {
-	TRACE(("HandleInsertSelectable(%d)\n", *num_params));
+	TRACE_EVENT("HandleInsertSelectable", event, params, num_params);
 
 	if (*num_params == 2) {
 	    CELL start, finish;
